@@ -1,15 +1,130 @@
-# SC2 AI Bot
+<div align="center">
+
+# 🚀 B0B - The Builder
+
+[![CI Status](https://github.com/V1ct0r-S4g3/B0B-The-Builder/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/V1ct0r-S4g3/B0B-The-Builder/actions)
+[![codecov](https://codecov.io/gh/V1ct0r-S4g3/B0B-The-Builder/graph/badge.svg?token=YOUR-TOKEN-HERE)](https://codecov.io/gh/V1ct0r-S4g3/B0B-The-Builder)
+[![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
+[![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
+
+</div>
+
+A high-performance StarCraft II AI bot built using the [python-sc2](https://github.com/BurnySc2/python-sc2) framework. This project implements a Terran bot with a modular architecture for different aspects of gameplay.
+
+## 🎯 Features
+
+- 🏗️ Modular architecture with separate managers for economy, military, and strategy
+- 🤖 Advanced unit control and micro-management
+- 📊 Game state analysis and decision making
+- 🧪 Comprehensive test suite
+- 🔄 Continuous Integration with GitHub Actions
 
 A StarCraft II AI bot built using the [python-sc2](https://github.com/BurnySc2/python-sc2) framework. This project implements a Terran bot with modular managers for different aspects of gameplay.
 
-## Quick Start
+## 🚀 Quick Start
+
+### 📋 Prerequisites
+
+- [StarCraft II](https://starcraft2.com/en-us/) (latest version)
+- [Maps](https://github.com/Blizzard/s2client-proto#downloads) (place in `StarCraftII/Maps/`)
+- Python 3.10+
+- [pip](https://pip.pypa.io/en/stable/installation/)
+
+### ⚙️ Installation
+
+1. **Clone the repository**
+   ```bash
+   git clone https://github.com/V1ct0r-S4g3/B0B-The-Builder.git
+   cd B0B-The-Builder
+   ```
+
+2. **Set up a virtual environment** (recommended)
+   ```bash
+   python -m venv venv
+   .\venv\Scripts\activate  # On Windows
+   source venv/bin/activate  # On Linux/Mac
+   ```
+
+3. **Install dependencies**
+   ```bash
+   pip install -r requirements.txt
+   ```
+
+4. **Set up StarCraft II**
+   - Install StarCraft II from Battle.net
+   - Set the `SC2PATH` environment variable to your StarCraft II installation directory
+   - On Windows:
+     ```cmd
+     setx SC2PATH "C:\Program Files (x86)\StarCraft II"
+     ```
+   - On Linux/Mac:
+     ```bash
+     echo 'export SC2PATH="/path/to/StarCraftII"' >> ~/.bashrc
+     source ~/.bashrc
+     ```
 
 ### Prerequisites
 - StarCraft II installed (via Battle.net)
 - Python 3.7+
 - Required Python packages (install with `pip install -r requirements.txt`)
 
-### Running the Bot (One-Command Method)
+## 🕹️ Running the Bot
+
+### Basic Usage
+
+```bash
+python run_bot.py
+```
+
+### Available Arguments
+
+- `--GamePort`: Game port (default: 5000)
+- `--StartPort`: Start port (default: 5000)
+- `--LadderServer`: Ladder server address
+- `--ComputerRace`: Computer race (default: random)
+- `--ComputerDifficulty`: Computer difficulty (default: very_hard)
+- `--ComputerBuild`: Computer build (default: random)
+
+### Running Tests
+
+```bash
+# Run all tests
+pytest tests/
+
+# Run specific test file
+pytest tests/test_environment.py -v
+```
+
+## 🏗️ Project Structure
+
+```
+src/
+├── bot/               # Main bot implementation
+├── managers/          # Gameplay managers
+├── config/            # Configuration files
+├── tests/             # Test files
+└── utils/             # Utility functions
+```
+
+## 🤝 Contributing
+
+Contributions are welcome! Please follow these steps:
+
+1. Fork the repository
+2. Create a new branch (`git checkout -b feature/AmazingFeature`)
+3. Commit your changes (`git commit -m 'Add some AmazingFeature'`)
+4. Push to the branch (`git push origin feature/AmazingFeature`)
+5. Open a Pull Request
+
+## 📝 License
+
+This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+
+## 🙏 Acknowledgments
+
+- [python-sc2](https://github.com/BurnySc2/python-sc2) - For the amazing StarCraft II API
+- [SSCAIT](https://sscaitournament.com/) - For inspiration and resources
+- The StarCraft II AI community - For their support and knowledge sharing
 
 1. **First, set the SC2PATH environment variable** (one-time setup):
    ```

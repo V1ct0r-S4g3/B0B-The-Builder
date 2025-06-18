@@ -1,10 +1,13 @@
-name: CI - Test and Lint
+name: CI - Test, Lint, and SC2 Integration
 
 on:
   push:
     branches: [ main, master ]
   pull_request:
     branches: [ main, master ]
+
+env:
+  SC2_PATH: ${{ github.workspace }}/StarCraftII
 
 jobs:
   test:
@@ -20,15 +23,34 @@ jobs:
       with:
         python-version: '3.10'
     
-    - name: Install dependencies
+    - name: Install StarCraft II
+      run: |
+        # Download and extract SC2 API
+        $apiUrl = 'https://github.com/Blizzard/s2client-proto/releases/download/latest/s2client-api-windows-x64.zip'
+        $output = 's2client-api.zip'
+        Invoke-WebRequest -Uri $apiUrl -OutFile $output
+        Expand-Archive -Path $output -DestinationPath $env:SC2_PATH -Force
+        
+        # Set environment variable
+        echo "SC2PATH=$env:SC2_PATH" | Out-File -FilePath $env:GITHUB_ENV -Append
+        
+        # Verify SC2 installation
+        if (Test-Path "$env:SC2_PATH/Versions") {
+            echo "SC2 installation verified"
+        } else {
+            echo "SC2 installation failed"
+            exit 1
+        }
+    
+    - name: Install Python dependencies
       run: |
         python -m pip install --upgrade pip
         pip install -r requirements.txt
-        pip install pytest pytest-cov
+        pip install pytest pytest-cov pytest-asyncio
     
     - name: Run tests
       run: |
-        python -m pytest tests/ -v --cov=managers --cov-report=xml
+        python -m pytest tests/ -v --cov=src --cov-report=xml --asyncio-mode=auto
     
     - name: Upload coverage to Codecov
       uses: codecov/codecov-action@v3
