@@ -1,0 +1,35 @@
+============================= test session starts =============================
+platform win32 -- Python 3.10.3, pytest-8.4.0, pluggy-1.6.0 -- C:\Users\Student\AppData\Local\Programs\Python\Python310\python.exe
+cachedir: .pytest_cache
+rootdir: D:\SC2 Bot\B0B
+configfile: pytest.ini
+plugins: asyncio-1.0.0
+asyncio: mode=auto, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 4 items
+
+tests/test_military_manager.py::TestMilitaryManager::test_initialization PASSED
+tests/test_military_manager.py::TestMilitaryManager::test_emergency_supply PASSED
+tests/test_military_manager.py::TestMilitaryManager::test_control_army FAILED
+tests/test_military_manager.py::TestMilitaryManager::test_execute_build_order FAILED
+
+================================== FAILURES ===================================
+____________________ TestMilitaryManager.test_control_army ____________________
+tests\test_military_manager.py:157: in test_control_army
+    marine.attack.assert_called_once()
+C:\Users\Student\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:898: in assert_called_once
+    raise AssertionError(msg)
+E   AssertionError: Expected 'attack' to have been called once. Called 0 times.
+________________ TestMilitaryManager.test_execute_build_order _________________
+tests\test_military_manager.py:188: in test_execute_build_order
+    mock_ai.find_placement.assert_called_with(UnitTypeId.BARRACKS, near=mock_ai.townhalls.first.position, placement_step=2)
+C:\Users\Student\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:910: in assert_called_with
+    raise AssertionError(error_message)
+E   AssertionError: expected call not found.
+E   Expected: find_placement(UnitTypeId.BARRACKS, near=<MagicMock name='mock.townhalls.first.position' id='2222313046704'>, placement_step=2)
+E   Actual: not called.
+=========================== short test summary info ===========================
+FAILED tests/test_military_manager.py::TestMilitaryManager::test_control_army - AssertionError: Expected 'attack' to have been called once. Called 0 times.
+FAILED tests/test_military_manager.py::TestMilitaryManager::test_execute_build_order - AssertionError: expected call not found.
+Expected: find_placement(UnitTypeId.BARRACKS, near=<MagicMock name='mock.townhalls.first.position' id='2222313046704'>, placement_step=2)
+Actual: not called.
+========================= 2 failed, 2 passed in 1.38s =========================

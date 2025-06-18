@@ -1,0 +1,26 @@
+=== Starting debug_expand_now ===
+Created mock_ai
+Set basic attributes
+Created mock worker
+Mocked async methods
+Mocked structures
+Mocked already_pending
+Mocked townhalls
+Mocked enemy_units
+Created EconomyManager instance
+Added head attribute
+=== Calling expand_now ===
+[Economy] expand_now called. Head: True, Can afford: True
+[Economy] Found 1 expansion locations
+[Economy] Found existing Command Center near (100, 100)
+[Economy] No valid expansion location available
+expand_now result: False
+Build method was not called
+
+=== Debug Info ===
+hasattr(self, 'head'): True
+self.head: <MagicMock id='1481964350208'>
+can_afford: True
+already_pending: 0
+townhalls: True
+townhalls.first: <MagicMock name='mock.townhalls.first' id='1481964253728'>

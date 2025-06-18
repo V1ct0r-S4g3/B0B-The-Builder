@@ -1,0 +1,3 @@
+Direct file write test
+This is a test message.
+Testing 1, 2, 3...

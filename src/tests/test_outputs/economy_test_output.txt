@@ -1,0 +1,84 @@
+============================= test session starts =============================
+platform win32 -- Python 3.10.3, pytest-8.4.0, pluggy-1.6.0 -- C:\Users\Student\AppData\Local\Programs\Python\Python310\python.exe
+cachedir: .pytest_cache
+rootdir: D:\SC2 Bot\B0B
+configfile: pytest.ini
+plugins: asyncio-1.0.0
+asyncio: mode=auto, asyncio_default_fixture_loop_scope=None, asyncio_default_test_loop_scope=function
+collecting ... collected 6 items
+
+tests/test_economy_manager.py::TestEconomyManager::test_train_workers FAILED
+tests/test_economy_manager.py::TestEconomyManager::test_build_supply_depot PASSED
+tests/test_economy_manager.py::TestEconomyManager::test_manage_gas_workers PASSED
+tests/test_economy_manager.py::TestEconomyManager::test_worker_distribution FAILED
+tests/test_economy_manager.py::TestEconomyManager::test_expand_now 
+=== Starting test_expand_now ===
+Test setup - Time: 200, Minerals: 600
+Mock worker created and select_build_worker mocked
+Mocked can_place and find_placement
+Mocked structures to return empty list for Command Centers
+Mocked already_pending
+Mocked can_afford to check minerals
+Mocked townhalls
+Mocked enemy_units
+Set head on economy_manager: <MagicMock id='2083474756304'>
+
+=== Testing successful expansion ===
+[Economy] expand_now called. Head: True, Can afford: True
+[Economy] Found 1 expansion locations
+[Economy] Building Command Center at (100, 100)
+expand_now result: True
+Build method called correctly
+
+=== Testing no expansion locations ===
+[Economy] expand_now called. Head: True, Can afford: True
+[Economy] No expansion locations found
+expand_now result with no locations: False
+
+=== Testing not enough minerals ===
+[Economy] expand_now called. Head: True, Can afford: False
+[Economy] Can't expand - head: True, can_afford: False
+expand_now result with not enough minerals: False
+
+=== Testing too early to expand ===
+[Economy] expand_now called. Head: True, Can afford: True
+[Economy] Too early to expand (time: 100, min time: 180)
+expand_now result when too early: False
+PASSED
+tests/test_economy_manager.py::TestEconomyManager::test_orbital_command_upgrade FAILED
+
+================================== FAILURES ===================================
+____________________ TestEconomyManager.test_train_workers ____________________
+tests\test_economy_manager.py:138: in test_train_workers
+    assert result is False
+E   assert True is False
+_________________ TestEconomyManager.test_worker_distribution _________________
+tests\test_economy_manager.py:221: in test_worker_distribution
+    await economy_manager.distribute_workers()
+E   AttributeError: 'EconomyManager' object has no attribute 'distribute_workers'
+_______________ TestEconomyManager.test_orbital_command_upgrade _______________
+tests\test_economy_manager.py:377: in test_orbital_command_upgrade
+    mock_ai.townhalls.first.train.assert_called_once_with(UnitTypeId.ORBITALCOMMAND, queue=False)
+C:\Users\Student\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:931: in assert_called_once_with
+    return self.assert_called_with(*args, **kwargs)
+C:\Users\Student\AppData\Local\Programs\Python\Python310\lib\unittest\mock.py:919: in assert_called_with
+    raise AssertionError(_error_message()) from cause
+E   AssertionError: expected call not found.
+E   Expected: train(UnitTypeId.ORBITALCOMMAND, queue=False)
+E   Actual: train(UnitTypeId.SCV)
+============================== warnings summary ===============================
+tests/test_economy_manager.py::TestEconomyManager::test_train_workers
+tests/test_economy_manager.py::TestEconomyManager::test_orbital_command_upgrade
+  D:\SC2 Bot\B0B\managers\economy_manager.py:155: RuntimeWarning: coroutine 'AsyncMockMixin._execute_mock_call' was never awaited
+    structure.train(UnitTypeId.SCV)
+  Enable tracemalloc to get traceback where the object was allocated.
+  See https://docs.pytest.org/en/stable/how-to/capture-warnings.html#resource-warnings for more info.
+
+-- Docs: https://docs.pytest.org/en/stable/how-to/capture-warnings.html
+=========================== short test summary info ===========================
+FAILED tests/test_economy_manager.py::TestEconomyManager::test_train_workers - assert True is False
+FAILED tests/test_economy_manager.py::TestEconomyManager::test_worker_distribution - AttributeError: 'EconomyManager' object has no attribute 'distribute_workers'
+FAILED tests/test_economy_manager.py::TestEconomyManager::test_orbital_command_upgrade - AssertionError: expected call not found.
+Expected: train(UnitTypeId.ORBITALCOMMAND, queue=False)
+Actual: train(UnitTypeId.SCV)
+=================== 3 failed, 3 passed, 2 warnings in 0.84s ===================
