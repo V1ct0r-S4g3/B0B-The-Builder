@@ -3,7 +3,6 @@
 # 🚀 B0B - The Builder
 
 [![CI Status](https://github.com/V1ct0r-S4g3/B0B-The-Builder/actions/workflows/ci.yml/badge.svg?branch=main)](https://github.com/V1ct0r-S4g3/B0B-The-Builder/actions)
-[![codecov](https://codecov.io/gh/V1ct0r-S4g3/B0B-The-Builder/graph/badge.svg?token=YOUR-TOKEN-HERE)](https://codecov.io/gh/V1ct0r-S4g3/B0B-The-Builder)
 [![License: MIT](https://img.shields.io/badge/License-MIT-yellow.svg)](https://opensource.org/licenses/MIT)
 [![Python 3.10+](https://img.shields.io/badge/python-3.10+-blue.svg)](https://www.python.org/downloads/)
 

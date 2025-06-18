@@ -50,13 +50,7 @@ jobs:
     
     - name: Run tests
       run: |
-        python -m pytest tests/ -v --cov=src --cov-report=xml --asyncio-mode=auto
-    
-    - name: Upload coverage to Codecov
-      uses: codecov/codecov-action@v3
-      with:
-        file: ./coverage.xml
-        fail_ci_if_error: false
+        python -m pytest tests/ -v --cov=src --cov-report=term --asyncio-mode=auto
 
   lint:
     name: Lint with flake8
