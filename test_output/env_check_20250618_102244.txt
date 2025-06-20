@@ -1,0 +1,27 @@
+================================================================================
+PYTHON ENVIRONMENT CHECK
+================================================================================
+Timestamp: Wed Jun 18 10:22:44 2025
+Python Executable: C:\Users\Student\AppData\Local\Programs\Python\Python310\python.exe
+Python Version: 3.10.3 (tags/v3.10.3:a342a49, Mar 16 2022, 13:07:40) [MSC v.1929 64 bit (AMD64)]
+Platform: Windows-10-10.0.26100-SP0
+Current Working Directory: D:\SC2 Bot\B0B
+Python Path: ['D:\\SC2 Bot\\B0B', 'd:\\SC2 Bot\\B0B', 'C:\\Users\\Student\\AppData\\Local\\Programs\\Python\\Python310\\python310.zip', 'C:\\Users\\Student\\AppData\\Local\\Programs\\Python\\Python310\\DLLs', 'C:\\Users\\Student\\AppData\\Local\\Programs\\Python\\Python310\\lib', 'C:\\Users\\Student\\AppData\\Local\\Programs\\Python\\Python310', 'C:\\Users\\Student\\AppData\\Local\\Programs\\Python\\Python310\\lib\\site-packages']
+
+✓ Successfully wrote to test file: test_output\test_file_20250618_102244.txt
+✓ Successfully read from test file: Test content
+✓ Successfully removed test file: test_output\test_file_20250618_102244.txt
+
+Testing imports:
+✓ os imported successfully
+✓ sys imported successfully
+✓ platform imported successfully
+✓ time imported successfully
+✓ unittest imported successfully
+✓ sc2 imported successfully
+✓ numpy imported successfully
+✓ loguru imported successfully
+✓ pytest imported successfully
+
+Environment check completed successfully!
+Full output saved to: D:\SC2 Bot\B0B\test_output\env_check_20250618_102244.txt

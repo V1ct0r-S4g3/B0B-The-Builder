@@ -1,18 +1,16 @@
 """
-Test runner script with enhanced debugging and test discovery.
+Robust test runner for the SC2 Bot project.
 
-This script provides detailed information about the test environment,
-discovered tests, and their execution results.
+This script provides a more reliable way to run tests across different environments.
+It includes better error handling and output formatting.
 """
-import unittest
 import os
 import sys
-import importlib
-import importlib.util
-import traceback
 import time
+import unittest
+import traceback
 from pathlib import Path
-from typing import List, Dict, Any, Optional, Tuple, Union
+from typing import List, Dict, Any, Optional, Tuple
 
 # ANSI color codes for terminal output
 class Colors:
@@ -25,33 +23,6 @@ class Colors:
     ENDC = '\033[0m'
     BOLD = '\033[1m'
     UNDERLINE = '\033[4m'
-
-# Add the project root and src directory to the Python path
-project_root = os.path.abspath(os.path.dirname(__file__))
-src_dir = os.path.join(project_root, 'src')
-
-# Add both to sys.path if not already there
-for path in [project_root, src_dir]:
-    if path not in sys.path:
-        sys.path.insert(0, path)
-
-def list_python_files(directory: str) -> List[str]:
-    """
-    List all Python files in the given directory.
-    
-    Args:
-        directory: Path to the directory to search
-        
-    Returns:
-        List of Python filenames (not full paths)
-    """
-    if not os.path.isdir(directory):
-        print(f"Directory not found: {directory}")
-        return []
-        
-    return [f for f in os.listdir(directory) 
-            if f.endswith('.py') and f != '__init__.py'
-            and not f.startswith('__pycache__')]
 
 def print_header(title: str, color: str = Colors.HEADER) -> None:
     """Print a formatted header with the given title and color."""
@@ -75,45 +46,6 @@ def print_info(message: str) -> None:
     """Print an informational message in blue."""
     print(f"{Colors.OKBLUE}ℹ {message}{Colors.ENDC}")
 
-def print_environment_info() -> None:
-    """Print information about the Python environment."""
-    print_header("PYTHON ENVIRONMENT")
-    print(f"{Colors.BOLD}Python executable:{Colors.ENDC} {sys.executable}")
-    print(f"{Colors.BOLD}Python version:{Colors.ENDC} {sys.version}")
-    print(f"{Colors.BOLD}Current working directory:{Colors.ENDC} {os.getcwd()}")
-    
-    print(f"\n{Colors.BOLD}Python path:{Colors.ENDC}")
-    for i, path in enumerate(sys.path, 1):
-        print(f"  {i}. {path}")
-
-def discover_test_modules(test_dir: str) -> List[Tuple[str, str, str]]:
-    """
-    Discover all test modules in the given directory.
-    
-    Args:
-        test_dir: Directory containing test files
-        
-    Returns:
-        List of (module_name, file_path, display_name) tuples
-    """
-    if not os.path.isdir(test_dir):
-        print_error(f"Test directory not found: {test_dir}")
-        return []
-    
-    test_files = sorted(list_python_files(test_dir))
-    print_info(f"Found {len(test_files)} test files in {test_dir}")
-    
-    modules = []
-    for i, test_file in enumerate(test_files, 1):
-        base_name = os.path.splitext(test_file)[0]
-        module_name = f"tests.{base_name}"
-        file_path = os.path.join(test_dir, test_file)
-        display_name = base_name.replace('_', ' ').title()
-        print(f"  {i:2d}. {test_file} ({display_name})")
-        modules.append((module_name, file_path, display_name))
-    
-    return modules
-
 class TestResult:
     """Class to track test results."""
     def __init__(self):
@@ -124,7 +56,7 @@ class TestResult:
         self.skipped = 0
         self.test_cases = []
     
-    def add_test_case(self, name: str, status: str, message: str = "", duration: float = 0.0):
+    def add_test_case(self, name: str, status: str, message: str = "", duration: float = 0.0) -> None:
         """Add a test case result."""
         self.test_cases.append({
             'name': name,
@@ -170,57 +102,74 @@ class TestResult:
 
 def run_tests() -> int:
     """
-    Run tests with detailed debugging information.
+    Run all tests in the tests directory.
     
     Returns:
-        int: Number of test failures (0 for success, non-zero for failures)
+        int: 0 if all tests passed, 1 otherwise
     """
     start_time = time.time()
     print_header("SC2 BOT TEST RUNNER", Colors.HEADER)
     
-    # Print environment information
-    print_environment_info()
-    
-    # Test directory
+    # Set up paths
+    project_root = os.path.abspath(os.path.dirname(__file__))
     test_dir = os.path.join(project_root, 'tests')
-    print_info(f"Looking for tests in: {test_dir}")
     
-    # Discover test modules
-    test_modules = discover_test_modules(test_dir)
-    if not test_modules:
-        print_error("No test modules found!")
-        return 1
+    # Add project root to Python path
+    if project_root not in sys.path:
+        sys.path.insert(0, project_root)
     
-    # Initialize test runner and results
-    loader = unittest.TestLoader()
-    runner = unittest.TextTestRunner(verbosity=2)
+    # Initialize test results
     test_results = TestResult()
     
-    # Try to import and run each test module
+    # Check if test directory exists
+    if not os.path.isdir(test_dir):
+        print_error(f"Test directory not found: {test_dir}")
+        return 1
+    
+    # Discover test files
+    test_files = []
+    for root, _, files in os.walk(test_dir):
+        for file in files:
+            if file.startswith('test_') and file.endswith('.py'):
+                test_files.append(os.path.join(root, file))
+    
+    if not test_files:
+        print_error("No test files found!")
+        return 1
+    
+    # Sort test files for consistent ordering
+    test_files.sort()
+    
+    print_info(f"Found {len(test_files)} test files:")
+    for i, test_file in enumerate(test_files, 1):
+        print(f"  {i:2d}. {os.path.relpath(test_file, project_root)}")
+    
+    # Run tests
     print_header("RUNNING TESTS", Colors.OKBLUE)
     
-    for module_name, module_path, display_name in test_modules:
+    # Set up test loader and runner
+    loader = unittest.TestLoader()
+    runner = unittest.TextTestRunner(verbosity=2)
+    
+    for test_file in test_files:
         module_start_time = time.time()
-        print_header(f"TEST MODULE: {display_name}", Colors.OKCYAN)
-        print(f"File: {os.path.relpath(module_path, project_root)}")
-        print(f"Module: {module_name}")
+        module_name = os.path.splitext(os.path.basename(test_file))[0]
+        module_display_name = module_name.replace('_', ' ').title()
+        
+        print_header(f"TEST MODULE: {module_display_name}", Colors.OKCYAN)
+        print(f"File: {os.path.relpath(test_file, project_root)}")
         
         try:
-            # Try to import the module
-            print_info(f"Importing module: {module_name}")
-            spec = importlib.util.spec_from_file_location(module_name, module_path)
+            # Import the test module
+            print_info(f"Importing test module: {module_name}")
             
-            if spec is None:
-                error_msg = f"Could not create module spec for {module_name}"
-                print_error(error_msg)
-                test_results.add_test_case(module_name, 'ERROR', error_msg)
-                continue
-                
+            # Calculate the module path relative to the project root
+            rel_path = os.path.relpath(test_file, project_root)
+            module_path = os.path.splitext(rel_path)[0].replace(os.path.sep, '.')
+            
             # Import the module
             try:
-                module = importlib.util.module_from_spec(spec)
-                sys.modules[module_name] = module
-                spec.loader.exec_module(module)
+                module = __import__(module_path, fromlist=['*'])
                 print_success(f"Successfully imported {module_name}")
             except Exception as e:
                 error_msg = f"Error importing {module_name}: {str(e)}"
@@ -228,14 +177,14 @@ def run_tests() -> int:
                 test_results.add_test_case(module_name, 'ERROR', error_msg)
                 continue
             
-            # Discover and run tests in the module
+            # Discover and run tests
             try:
                 print_info(f"Discovering tests in {module_name}...")
                 test_suite = loader.loadTestsFromModule(module)
                 test_count = test_suite.countTestCases()
                 
                 if test_count == 0:
-                    print_warning(f"No tests found in {module_name}")
+                    print_warning(f"No test cases found in {module_name}")
                     test_results.add_test_case(module_name, 'SKIPPED', "No test cases found")
                     continue
                 
@@ -245,7 +194,7 @@ def run_tests() -> int:
                 # Record test results
                 duration = time.time() - module_start_time
                 
-                # Add successful tests
+                # Process test results
                 for test_case in result.passed:
                     test_results.add_test_case(
                         f"{module_name}.{test_case._testMethodName}",
@@ -253,7 +202,6 @@ def run_tests() -> int:
                         duration=duration
                     )
                 
-                # Add failed tests
                 for test_case, trace in result.failures + result.errors:
                     test_name = f"{module_name}.{test_case._testMethodName}"
                     if test_case in result.errors:
@@ -270,7 +218,6 @@ def run_tests() -> int:
                         duration=duration
                     )
                 
-                # Add skipped tests
                 for test_case, reason in result.skipped:
                     test_results.add_test_case(
                         f"{module_name}.{test_case._testMethodName}",
@@ -319,4 +266,8 @@ if __name__ == "__main__":
         sys.exit(run_tests())
     except KeyboardInterrupt:
         print("\nTest run interrupted by user")
+        sys.exit(1)
+    except Exception as e:
+        print_error(f"Unexpected error: {str(e)}")
+        traceback.print_exc()
         sys.exit(1)

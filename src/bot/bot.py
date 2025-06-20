@@ -2,6 +2,14 @@ from sc2.bot_ai import BotAI
 from sc2.data import Result, Race
 from sc2.ids.unit_typeid import UnitTypeId
 from sc2.position import Point2
+
+# Add the src directory to the Python path
+import sys
+from pathlib import Path
+current_dir = Path(__file__).parent
+src_dir = current_dir.parent
+sys.path.insert(0, str(src_dir))
+
 from managers.economy_manager import EconomyManager
 from managers.military_manager import MilitaryManager
 from managers.head_manager import HeadManager

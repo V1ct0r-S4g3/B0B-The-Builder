@@ -130,58 +130,138 @@ def main():
     # Set working directory to the SC2 executable's directory
     sc2_dir = os.path.dirname(sc2_path)
     
-    # Start StarCraft II in the background with a window
-    sc2_process = subprocess.Popen(
-        [sc2_path, 
-         '-listen', '127.0.0.1', 
-         '-port', '8167', 
-         '-displayMode', '0', 
-         '-windowwidth', '1024', 
-         '-windowheight', '768',
-         '-windowx', '0',
-         '-windowy', '0',
-         '-noaudio',  # Disable audio to prevent initialization issues
-         '-verbose'],
-        cwd=sc2_dir,  # Set working directory
-        env=env,      # Pass environment variables
-        stdout=subprocess.PIPE,
-        stderr=subprocess.PIPE,
-        text=True,
-        bufsize=1,
-        universal_newlines=True,
-        creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == 'win32' else 0
-    )
+    # Start StarCraft II with diagnostic parameters
+    sc2_args = [
+        sc2_path,
+        '-listen', '127.0.0.1',
+        '-port', '8167',
+        '-displayMode', '0',  # Windowed mode
+        '-windowwidth', '1024',
+        '-windowheight', '768',
+        '-noaudio',  # Disable audio
+        '-verbose',  # Enable verbose logging
+        '-debug',    # Enable debug mode
+        '-dataVersion', 'B89B5D6FA7CBFEF2EE84396DDDD9D678',  # Force specific data version
+        '-tempDir', str(Path.home() / 'Documents' / 'StarCraftII')  # Use standard temp dir
+    ]
+    
+    # Set environment variables for debugging
+    env['SC2_NO_FMOD'] = '1'  # Disable FMOD audio system
+    env['SC2_NO_OPENGL'] = '1'  # Disable OpenGL
+    env['SC2_NO_VULKAN'] = '1'  # Disable Vulkan
+    env['SC2_NO_MT'] = '1'  # Disable multi-threading
+    env['SC2_LOCALFONT'] = '1'  # Use local fonts
+    
+    logger.info(f"Launching StarCraft II with: {' '.join(sc2_args)}")
+    
+    try:
+        sc2_process = subprocess.Popen(
+            sc2_args,
+            cwd=sc2_dir,  # Set working directory
+            env=env,      # Pass environment variables
+            stdout=subprocess.PIPE,
+            stderr=subprocess.PIPE,
+            text=True,
+            bufsize=1,
+            universal_newlines=True,
+            creationflags=subprocess.CREATE_NEW_PROCESS_GROUP if sys.platform == 'win32' else 0
+        )
+    except Exception as e:
+        logger.error(f"Failed to start StarCraft II: {e}")
+        raise
     
     # Start a thread to read and log the output
-    def log_output(pipe, logger_func):
+    def log_output(pipe, logger_func, log_type='OUT'):
+        """Read and log output from the process."""
         try:
-            for line in iter(pipe.readline, ''):
-                if line.strip():
-                    logger_func(f'SC2: {line.strip()}')
-        except ValueError:
-            pass  # Pipe was closed
+            while True:
+                line = pipe.readline()
+                if not line:  # EOF
+                    break
+                line = line.strip()
+                if line:
+                    logger_func(f'SC2 {log_type}: {line}')
+        except Exception as e:
+            logger_func(f'Error reading {log_type} pipe: {e}')
+        finally:
+            pipe.close()
     
     import threading
-    threading.Thread(target=log_output, args=(sc2_process.stdout, logger.info), daemon=True).start()
-    threading.Thread(target=log_output, args=(sc2_process.stderr, logger.error), daemon=True).start()
+    # Start output logging threads
+    stdout_thread = threading.Thread(
+        target=log_output,
+        args=(sc2_process.stdout, logger.info, 'STDOUT'),
+        daemon=True
+    )
+    stderr_thread = threading.Thread(
+        target=log_output,
+        args=(sc2_process.stderr, logger.error, 'STDERR'),
+        daemon=True
+    )
+    stdout_thread.start()
+    stderr_thread.start()
     
     logger.info(f"StarCraft II started with PID {sc2_process.pid}")
     logger.info("Waiting for StarCraft II to initialize...")
     
+    # Log process status periodically
+    def monitor_process(process):
+        while process.poll() is None:
+            time.sleep(1)
+        logger.warning(f"SC2 process ended with code {process.returncode}")
+    
+    monitor_thread = threading.Thread(
+        target=monitor_process,
+        args=(sc2_process,),
+        daemon=True
+    )
+    monitor_thread.start()
+    
     # Wait for SC2 to start with a timeout
-    max_wait_time = 60  # seconds
+    max_wait_time = 120  # Increased timeout to 120 seconds
     start_time = time.time()
     sc2_ready = False
+    crash_file = Path(sc2_dir) / 'Crash.dmp'
+    
+    # Clean up any existing crash dump
+    if crash_file.exists():
+        try:
+            crash_file.unlink()
+            logger.info("Removed existing crash dump file")
+        except Exception as e:
+            logger.warning(f"Could not remove crash dump file: {e}")
     
     while (time.time() - start_time) < max_wait_time:
         # Check if process is still running
         if sc2_process.poll() is not None:
-            stdout, stderr = sc2_process.communicate()
+            # Check for crash dump file
+            if crash_file.exists():
+                logger.error(f"Crash dump detected at: {crash_file}")
+                try:
+                    with open(crash_file, 'rb') as f:
+                        crash_data = f.read(1024)  # Read first KB of crash dump
+                        logger.error(f"Crash dump header: {crash_data[:200].decode('ascii', 'ignore')}...")
+                except Exception as e:
+                    logger.error(f"Could not read crash dump: {e}")
+            
+            # Try to read any remaining output
+            try:
+                stdout, stderr = sc2_process.communicate(timeout=5)
+                if stdout:
+                    logger.error(f"Final STDOUT: {stdout}")
+                if stderr:
+                    logger.error(f"Final STDERR: {stderr}")
+            except subprocess.TimeoutExpired:
+                logger.error("Timed out waiting for process to terminate")
+            
             logger.error(f"StarCraft II process ended unexpectedly. Exit code: {sc2_process.returncode}")
-            if stdout:
-                logger.error(f"STDOUT: {stdout}")
-            if stderr:
-                logger.error(f"STDERR: {stderr}")
+            logger.error("Common causes:")
+            logger.error("1. Missing or corrupted game files")
+            logger.error("2. Graphics driver issues")
+            logger.error("3. Permission problems")
+            logger.error("4. Incompatible SC2 version")
+            logger.error("5. Missing dependencies")
+            
             sys.exit(1)
         
         # Check if port is open (crude way to check if SC2 is ready)

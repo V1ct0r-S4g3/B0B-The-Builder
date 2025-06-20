@@ -521,6 +521,24 @@ class HeadManager:
                 
         return tech_level
     
+    def _calculate_saturation(self) -> float:
+        """Calculate the saturation level of bases (0.0-1.0)."""
+        try:
+            if not self.ai.townhalls:
+                return 0.0
+                
+            total_workers = self.ai.workers.amount
+            total_bases = self.ai.townhalls.amount
+            
+            # Assume 16 workers per base is optimal saturation
+            optimal_workers = total_bases * 16
+            saturation = min(total_workers / optimal_workers, 1.0) if optimal_workers > 0 else 0.0
+            
+            return saturation
+        except Exception as e:
+            logger.error(f"Error calculating saturation: {e}")
+            return 0.0
+    
     def _get_army_composition(self) -> Dict[UnitTypeId, int]:
         """Get the current army composition."""
         composition = {}

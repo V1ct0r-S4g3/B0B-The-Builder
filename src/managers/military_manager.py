@@ -42,16 +42,15 @@ class MilitaryManager:
             'bio_rush': [
                 (UnitTypeId.SUPPLYDEPOT, 13, "Supply Depot at 13 supply"),
                 # Wait for first depot to be built before barracks
-                (UnitTypeId.BARRACKS, 15, "First Barracks at 15 supply"),
-                (UnitTypeId.REFINERY, 16, "First Refinery"),
-                (UnitTypeId.BUNKER, 19, "Bunker for defense"),
-                (UnitTypeId.BARRACKS, 21, "Second Barracks"),
-                (UnitTypeId.FACTORY, 22, "Factory for tech"),
-                (UnitTypeId.STARPORT, 24, "Starport for air units"),
+                (UnitTypeId.BARRACKS, 14, "First Barracks at 14 supply"),
+                (UnitTypeId.REFINERY, 15, "First Refinery"),
+                (UnitTypeId.BUNKER, 17, "Bunker for defense"),
+                (UnitTypeId.BARRACKS, 19, "Second Barracks"),
+                (UnitTypeId.FACTORY, 20, "Factory for tech"),
+                (UnitTypeId.STARPORT, 22, "Starport for air units"),
                 # Delay second refinery until after first attack wave
-                (UnitTypeId.BARRACKS, 25, "Third Barracks"),
-                (UnitTypeId.REFINERY, 99, "Second Refinery - After first attack"),
-                (UnitTypeId.COMMANDCENTER, 100, "Expand to natural"),
+                (UnitTypeId.BARRACKS, 23, "Third Barracks"),
+                # Removed Command Center - EconomyManager handles expansions
             ],
             'mech': [
                 # Different build order for mech strategy
@@ -166,6 +165,9 @@ class MilitaryManager:
                 if self.debug and self.ai.time % 10 < 0.1:  # Log every 10 seconds
                     print("[Military] No build order available, waiting...")
             
+            # Continuous production logic - always run regardless of build order status
+            await self._continuous_production()
+            
             # Train army units
             await self._train_army()
             
@@ -192,6 +194,9 @@ class MilitaryManager:
             force_update: If True, force update even if strategy hasn't changed
         """
         try:
+            # Force update to clear any cached build order
+            force_update = True
+            
             if not self.head or not self.head.strategy:
                 return
                 
@@ -213,10 +218,7 @@ class MilitaryManager:
             if self.debug:
                 print(f"[Military] Updated build order for strategy: {strategy}")
                 print(f"[Military] Build order: {[step[2] for step in self.build_order]}")
-                
-            # Print the current build order
-            if self.debug and self.build_order:
-                print(f"[Military] Build order: {[step[2] for step in self.build_order]}")
+                print(f"[Military] Total steps: {len(self.build_order)}")
                     
         except Exception as e:
             if self.debug:
@@ -231,6 +233,10 @@ class MilitaryManager:
         """Execute the next step in the build order if conditions are met."""
         try:
             # Skip if we've completed the build order
+            if self.debug and self.ai.time % 5 < 0.1:  # Log every 5 seconds
+                print(f"[Military] Build order check - Index: {self.build_order_index}, Total steps: {len(self.build_order)}")
+                print(f"[Military] Build order steps: {[step[2] for step in self.build_order]}")
+                
             if self.build_order_index >= len(self.build_order):
                 if self.debug and self.ai.time % 10 < 0.1:
                     print(f"[Military] Build order completed at index {self.build_order_index}")
@@ -304,6 +310,8 @@ class MilitaryManager:
                 
             # Check if we already have this structure or it's being built
             existing = getattr(self.ai.structures(unit_type), 'amount', 0) + getattr(self.ai, 'already_pending', lambda x: 0)(unit_type)
+            if self.debug:
+                print(f"[Military] Checking existing {unit_type}: {existing}")
             if existing > 0:
                 if self.debug:
                     print(f"[Military] {unit_type} already exists or is pending")
@@ -311,6 +319,8 @@ class MilitaryManager:
                 return
                 
             # Try to build the structure
+            if self.debug:
+                print(f"[Military] About to call _try_build_structure for {unit_type}")
             if await self._try_build_structure(unit_type):
                 if self.debug:
                     print(f"[Military] {description}")
@@ -335,21 +345,18 @@ class MilitaryManager:
                 traceback.print_exc()
     
     async def _try_build_structure(self, unit_type):
-        """Try to build a structure."""
+        """Try to build a structure with better placement logic."""
         try:
             if self.debug:
                 print(f"\n[Military] === Starting _try_build_structure for {unit_type} ===")
-                print(f"[Military] Debug info - Supply depot completed: {hasattr(self, '_first_depot_completed') or self._is_first_supply_depot_completed()}")
                 print(f"[Military] Can afford {unit_type}: {self.ai.can_afford(unit_type)}")
-                print(f"[Military] Townhalls exist: {bool(self.ai.townhalls)}")
                 
             # Skip if we don't have a completed supply depot yet (except for the depot itself)
             if unit_type != UnitTypeId.SUPPLYDEPOT:
-                if not hasattr(self, '_first_depot_completed') and not self._is_first_supply_depot_completed():
+                if not hasattr(self, '_first_depot_completed') or not self._is_first_supply_depot_completed():
                     if self.debug:
-                        print(f"[Military] Waiting for first supply depot to complete before {description}")
-                        print(f"[Military] Supply depots: {getattr(self.ai.structures(UnitTypeId.SUPPLYDEPOT).ready, 'amount', 0)} built, {getattr(self.ai, 'already_pending', lambda x: 0)(UnitTypeId.SUPPLYDEPOT)} pending")
-                    return
+                        print(f"[Military] Waiting for first supply depot to complete before {unit_type}")
+                    return False
                 
             # Check if we can afford the structure
             if not self.ai.can_afford(unit_type):
@@ -363,22 +370,12 @@ class MilitaryManager:
                     print("[Military] No townhalls found to build near")
                 return False
                 
-            # Get a position near the first townhall
-            townhall = self.ai.townhalls.first
-            near_position = townhall.position
+            # Get strategic placement position based on structure type
+            placement = await self._get_strategic_placement(unit_type)
             
-            if self.debug:
-                print(f"[Military] Attempting to find placement for {unit_type} near {near_position}")
-                
-            # Find a placement for the structure
-            placement = await self.ai.find_placement(unit_type, near=near_position, placement_step=2)
-            
-            if self.debug:
-                print(f"[Military] Placement result: {placement}")
-                
             if not placement:
                 if self.debug:
-                    print(f"[Military] Could not find placement for {unit_type}")
+                    print(f"[Military] Could not find strategic placement for {unit_type}")
                 return False
                 
             # Find a worker to build the structure
@@ -389,28 +386,25 @@ class MilitaryManager:
                 return False
                 
             # Check if we have enough workers before building production
-            # Skip this check for supply depots as they're needed early
             if unit_type != UnitTypeId.SUPPLYDEPOT:
                 worker_count = getattr(self.ai.workers, 'amount', 0)
-                if isinstance(worker_count, int) and worker_count < 16:  # Only check if worker_count is an actual number
+                if isinstance(worker_count, int) and worker_count < 16:
                     if self.debug:
                         print(f"[Military] Not enough workers ({worker_count}/16) to build {unit_type}")
                     return False
                 
             if self.debug:
-                print(f"[Military] Selected worker {worker} to build {unit_type} at {placement}")
+                print(f"[Military] Building {unit_type} at {placement}")
                 
-            # Issue build command - handle both real and mock AI
-            if hasattr(self.ai.build, '__await__'):
-                # Real AI case - use await
-                await self.ai.build(unit_type, near=placement, build_worker=worker)
+            # Issue build command
+            try:
+                worker.build(unit_type, placement)
                 if self.debug:
                     print(f"[Military] Started building {unit_type} at {placement}")
-            else:
-                # Mock case - just call directly
-                self.ai.build(unit_type, near=placement, build_worker=worker)
+            except Exception as build_error:
                 if self.debug:
-                    print(f"[Military] Mock build of {unit_type} at {placement}")
+                    print(f"[Military] Build command failed: {build_error}")
+                return False
             
             # Mark that we've started building the first depot if needed
             if unit_type == UnitTypeId.SUPPLYDEPOT and not hasattr(self, '_first_depot_started'):
@@ -426,6 +420,174 @@ class MilitaryManager:
                 import traceback
                 traceback.print_exc()
             return False
+    
+    async def _get_strategic_placement(self, unit_type):
+        """Get strategic placement position for different structure types."""
+        try:
+            townhall = self.ai.townhalls.first
+            base_position = townhall.position
+            map_center = self.ai.game_info.map_center
+            
+            # Calculate forward direction (towards map center)
+            forward_direction = (map_center - base_position).normalized
+            
+            if unit_type == UnitTypeId.SUPPLYDEPOT:
+                # Place supply depots in a wall formation around the base
+                return await self._get_supply_depot_placement(base_position, forward_direction)
+                
+            elif unit_type == UnitTypeId.BARRACKS:
+                # Place barracks in a line formation towards the front
+                return await self._get_barracks_placement(base_position, forward_direction)
+                
+            elif unit_type == UnitTypeId.FACTORY:
+                # Place factories in a production area
+                return await self._get_factory_placement(base_position, forward_direction)
+                
+            elif unit_type == UnitTypeId.STARPORT:
+                # Place starports in the back of the production area
+                return await self._get_starport_placement(base_position, forward_direction)
+                
+            elif unit_type == UnitTypeId.BUNKER:
+                # Place bunkers defensively
+                return await self._get_bunker_placement(base_position, forward_direction)
+                
+            else:
+                # Default placement near base
+                return await self.ai.find_placement(unit_type, near=base_position, placement_step=2)
+                
+        except Exception as e:
+            if self.debug:
+                print(f"[Military] Error in _get_strategic_placement: {e}")
+            return None
+    
+    async def _get_supply_depot_placement(self, base_position, forward_direction):
+        """Get placement for supply depots in a wall formation."""
+        try:
+            # Try to place supply depots closer to base in a wall formation
+            wall_positions = [
+                base_position + forward_direction * 4,  # Front wall (reduced from 8)
+                base_position + forward_direction * 4 + Point2((3, 0)),  # Front wall right (reduced from 4)
+                base_position + forward_direction * 4 + Point2((-3, 0)),  # Front wall left (reduced from -4)
+            ]
+            
+            for pos in wall_positions:
+                placement = await self.ai.find_placement(
+                    UnitTypeId.SUPPLYDEPOT,
+                    near=pos,
+                    placement_step=2,
+                    max_distance=4  # Reduced from 6
+                )
+                if placement:
+                    return placement
+                    
+            # Fallback to near base
+            return await self.ai.find_placement(UnitTypeId.SUPPLYDEPOT, near=base_position, placement_step=2)
+            
+        except Exception as e:
+            if self.debug:
+                print(f"[Military] Error in _get_supply_depot_placement: {e}")
+            return None
+    
+    async def _get_barracks_placement(self, base_position, forward_direction):
+        """Get placement for barracks in a line formation."""
+        try:
+            # Get existing barracks count for spacing
+            existing_barracks = self.ai.structures(UnitTypeId.BARRACKS).amount
+            barracks_spacing = 4  # Reduced from 6 for tighter formation
+            
+            # Calculate position for next barracks in line - closer to base
+            barracks_line_start = base_position + forward_direction * 6  # Reduced from 12
+            barracks_position = barracks_line_start + Point2((existing_barracks * barracks_spacing, 0))
+            
+            placement = await self.ai.find_placement(
+                UnitTypeId.BARRACKS,
+                near=barracks_position,
+                placement_step=2,
+                max_distance=6  # Reduced from 8
+            )
+            
+            if placement:
+                return placement
+                
+            # Fallback to near base
+            return await self.ai.find_placement(UnitTypeId.BARRACKS, near=base_position, placement_step=2)
+            
+        except Exception as e:
+            if self.debug:
+                print(f"[Military] Error in _get_barracks_placement: {e}")
+            return None
+    
+    async def _get_factory_placement(self, base_position, forward_direction):
+        """Get placement for factories in production area."""
+        try:
+            # Place factories closer to base
+            factory_area = base_position + forward_direction * 4 + Point2((0, 4))  # Reduced distances
+            
+            placement = await self.ai.find_placement(
+                UnitTypeId.FACTORY,
+                near=factory_area,
+                placement_step=2,
+                max_distance=6  # Reduced from 10
+            )
+            
+            if placement:
+                return placement
+                
+            # Fallback to near base
+            return await self.ai.find_placement(UnitTypeId.FACTORY, near=base_position, placement_step=2)
+            
+        except Exception as e:
+            if self.debug:
+                print(f"[Military] Error in _get_factory_placement: {e}")
+            return None
+    
+    async def _get_starport_placement(self, base_position, forward_direction):
+        """Get placement for starports in back of production area."""
+        try:
+            # Place starports closer to base
+            starport_area = base_position + forward_direction * 3 + Point2((0, -4))  # Reduced distances
+            
+            placement = await self.ai.find_placement(
+                UnitTypeId.STARPORT,
+                near=starport_area,
+                placement_step=2,
+                max_distance=6  # Reduced from 10
+            )
+            
+            if placement:
+                return placement
+                
+            # Fallback to near base
+            return await self.ai.find_placement(UnitTypeId.STARPORT, near=base_position, placement_step=2)
+            
+        except Exception as e:
+            if self.debug:
+                print(f"[Military] Error in _get_starport_placement: {e}")
+            return None
+    
+    async def _get_bunker_placement(self, base_position, forward_direction):
+        """Get placement for bunkers defensively."""
+        try:
+            # Place bunkers closer to base for defense
+            bunker_position = base_position + forward_direction * 5  # Reduced from 10
+            
+            placement = await self.ai.find_placement(
+                UnitTypeId.BUNKER,
+                near=bunker_position,
+                placement_step=2,
+                max_distance=4  # Reduced from 8
+            )
+            
+            if placement:
+                return placement
+                
+            # Fallback to near base
+            return await self.ai.find_placement(UnitTypeId.BUNKER, near=base_position, placement_step=2)
+            
+        except Exception as e:
+            if self.debug:
+                print(f"[Military] Error in _get_bunker_placement: {e}")
+            return None
     
     async def _train_army(self):
         """Train army units from production facilities."""
@@ -678,3 +840,111 @@ class MilitaryManager:
                 print(f"[Military] Error in _control_army: {e}")
                 import traceback
                 traceback.print_exc()
+
+    async def _continuous_production(self):
+        """Continuous production logic that runs regardless of build order status."""
+        try:
+            current_time = self.ai.time
+            
+            # Only run every few seconds to avoid spam
+            if current_time - getattr(self, '_last_continuous_production', 0) < 5:
+                return
+            self._last_continuous_production = current_time
+            
+            if self.debug:
+                print(f"[Military] Running continuous production at {current_time}s")
+            
+            # Build basic army structures if we don't have them
+            await self._ensure_basic_structures()
+            
+            # Build additional production facilities based on economy
+            await self._expand_production()
+            
+        except Exception as e:
+            if self.debug:
+                print(f"[Military] Error in continuous production: {e}")
+    
+    async def _ensure_basic_structures(self):
+        """Ensure we have basic army production structures."""
+        try:
+            # Build barracks if we don't have any
+            if not self.ai.structures(UnitTypeId.BARRACKS).ready:
+                if self.debug:
+                    print("[Military] Building first barracks")
+                await self._try_build_structure(UnitTypeId.BARRACKS)
+                return
+            
+            # Build factory if we don't have one and have barracks
+            if (self.ai.structures(UnitTypeId.BARRACKS).ready.amount >= 1 and 
+                not self.ai.structures(UnitTypeId.FACTORY).ready):
+                if self.debug:
+                    print("[Military] Building first factory")
+                await self._try_build_structure(UnitTypeId.FACTORY)
+                return
+            
+            # Build starport if we don't have one and have factory
+            if (self.ai.structures(UnitTypeId.FACTORY).ready.amount >= 1 and 
+                not self.ai.structures(UnitTypeId.STARPORT).ready):
+                if self.debug:
+                    print("[Military] Building first starport")
+                await self._try_build_structure(UnitTypeId.STARPORT)
+                return
+                
+        except Exception as e:
+            if self.debug:
+                print(f"[Military] Error ensuring basic structures: {e}")
+    
+    async def _expand_production(self):
+        """Build additional production facilities based on economy."""
+        try:
+            # Get current structure counts
+            barracks_count = self.ai.structures(UnitTypeId.BARRACKS).ready.amount
+            factory_count = self.ai.structures(UnitTypeId.FACTORY).ready.amount
+            starport_count = self.ai.structures(UnitTypeId.STARPORT).ready.amount
+            worker_count = self.ai.workers.amount
+            
+            # Set rally points for all barracks
+            await self._set_barracks_rally_points()
+            
+            # Build more barracks if we have enough workers and minerals (MAX 3 BARRACKS)
+            if (worker_count >= 20 and barracks_count < 3 and 
+                self.ai.minerals >= 150):
+                if self.debug:
+                    print(f"[Military] Building additional barracks ({barracks_count} -> {barracks_count + 1})")
+                await self._try_build_structure(UnitTypeId.BARRACKS)
+                return
+            
+            # Build more factories if we have enough workers and gas (MAX 2 FACTORIES)
+            if (worker_count >= 25 and factory_count < 2 and 
+                self.ai.minerals >= 150 and self.ai.vespene >= 100):
+                if self.debug:
+                    print(f"[Military] Building additional factory ({factory_count} -> {factory_count + 1})")
+                await self._try_build_structure(UnitTypeId.FACTORY)
+                return
+                
+        except Exception as e:
+            if self.debug:
+                print(f"[Military] Error expanding production: {e}")
+    
+    async def _set_barracks_rally_points(self):
+        """Set rally points for all barracks so trained units know where to go."""
+        try:
+            # Calculate rally point near the map center (forward position)
+            if self.ai.townhalls:
+                base_position = self.ai.townhalls.first.position
+                map_center = self.ai.game_info.map_center
+                
+                # Rally point is towards the map center from our base
+                rally_point = base_position.towards(map_center, 15)
+                
+                # Set rally point for all barracks
+                for barrack in self.ai.structures(UnitTypeId.BARRACKS).ready:
+                    if not hasattr(barrack, '_rally_set') or not barrack._rally_set:
+                        barrack(AbilityId.RALLY_BUILDING, rally_point)
+                        barrack._rally_set = True
+                        if self.debug:
+                            print(f"[Military] Set rally point for barracks at {rally_point}")
+                
+        except Exception as e:
+            if self.debug:
+                print(f"[Military] Error setting barracks rally points: {e}")

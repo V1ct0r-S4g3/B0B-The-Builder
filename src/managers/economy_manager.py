@@ -12,11 +12,11 @@ class EconomyManager:
         """Initialize the EconomyManager with a reference to the main AI object."""
         self.ai = ai
         self.head = None  # Will be set by HeadManager
-        self.worker_ratio = 16  # Reduced from 22 to slow down early game saturation
-        self.gas_workers_per_refinery = 3
-        self.supply_buffer = 4  # Build supply depots when we're this close to being supply blocked
+        self.worker_ratio = 24  # Increased from 16 to get more workers
+        self.gas_workers_per_refinery = 6  # Increased from 3 to get more gas workers
+        self.supply_buffer = 8  # Increased from 4 to be more proactive about supply
         self.expand_when_minerals = 500  # Increased from 400 to slow down expansion
-        self.min_time_before_expand = 180  # Don't expand before this many game seconds (3 minutes)
+        self.min_time_before_expand = 0  # Removed wait time - can expand immediately
         self.started_refineries = set()  # Track completed refineries
         self.refinery_started = set()  # Track started refineries to avoid duplicate builds
         self.last_supply_depot_time = 0
@@ -117,13 +117,13 @@ class EconomyManager:
                         self.last_supply_depot_time = current_time
             
             # Build refineries when we have enough workers
-            if (self.ai.workers.amount > 16 and  # Wait until we have some workers
-                current_time > 60 and  # And some time has passed
+            if (self.ai.workers.amount > 12 and  # Wait until we have some workers
+                current_time > 30 and  # And some time has passed
                 current_time - self.last_worker_train_time > 1.0):  # Don't interfere with worker production
                 await self.build_refineries()
             
-            # Manage gas workers
-            if current_time % 10 == 0:  # Only do this every 10 game loops
+            # Manage gas workers more frequently
+            if current_time % 5 == 0:  # Only do this every 5 game loops (was 10)
                 await self.manage_gas_workers()
             
             # Distribute workers periodically
@@ -161,14 +161,14 @@ class EconomyManager:
         current_time = self.ai.time
         
         # Don't try too often
-        if current_time - self.last_supply_attempt < 2.0:
+        if current_time - self.last_supply_attempt < 1.0:  # Reduced from 2.0 to be more aggressive
             return False
             
         # Reset attempt counter if it's been a while
         if current_time - self.last_supply_attempt > 10.0:
             self.supply_attempt_count = 0
             
-        # Check if we need supply
+        # Check if we need supply - be more aggressive
         if (self.ai.supply_left >= self.supply_buffer or 
             self.ai.supply_cap >= 200 or 
             self.ai.already_pending(UnitTypeId.SUPPLYDEPOT) > 0):
@@ -216,14 +216,15 @@ class EconomyManager:
                 if location and await self.ai.can_place(UnitTypeId.SUPPLYDEPOT, location):
                     # Get the best worker for the job
                     workers = self.ai.workers.filter(
-                        lambda w: (w.is_gathering or w.is_idle) and 
-                                not w.is_constructing and 
-                                not w.is_carrying_resource
+                        lambda w: w.is_idle and
+                        not w.is_constructing_scv and
+                        not w.is_gathering and
+                        not w.is_returning
                     )
                     
                     if not workers:
                         workers = self.ai.workers.filter(
-                            lambda w: not w.is_constructing
+                            lambda w: not w.is_constructing_scv
                         )
                     
                     if workers:
@@ -231,17 +232,16 @@ class EconomyManager:
                         
                         # If worker is carrying resources, make it return them first
                         if worker.is_carrying_resource:
-                            worker.return_resource()
                             if self.debug:
                                 print(f"[Economy] Worker returning resources before building Supply Depot")
-                            await self.ai.do(worker.return_resource())
+                            # Fix: Don't await worker.return_resource() - it returns a boolean
+                            worker.return_resource()
                             # Try next position
                             continue
                             
                         # If worker is doing something else, stop it
                         if not worker.is_idle:
                             worker.stop()
-                            await self.ai.do(worker.stop())
                         
                         # Issue build command
                         if await self.ai.can_place(UnitTypeId.SUPPLYDEPOT, location):
@@ -300,39 +300,53 @@ class EconomyManager:
 
     async def manage_gas_workers(self):
         """Ensure we have the right number of workers on gas."""
-        # For each refinery that's ready
-        for refinery in self.ai.structures(UnitTypeId.REFINERY).ready:
-            # Count workers assigned to this refinery
-            workers = self.ai.workers.closer_than(10, refinery)
-            worker_count = workers.amount
-            
-            # If we need more workers on this refinery
-            if worker_count < self.gas_workers_per_refinery:
-                # Find idle workers or workers on minerals
-                idle_workers = self.ai.workers.idle
-                if idle_workers:
-                    worker = idle_workers.random
-                else:
-                    # Try to get a worker that's mining minerals
-                    worker = workers.random if workers else None
-                    if not worker:
-                        worker = self.ai.workers.random
+        try:
+            # For each refinery that's ready
+            for refinery in self.ai.structures(UnitTypeId.REFINERY).ready:
+                # Count workers assigned to this refinery
+                workers = self.ai.workers.closer_than(10, refinery)
+                worker_count = workers.amount
                 
-                # Send worker to gather gas
-                if worker:
-                    worker.gather(refinery)
-            
-            # If we have too many workers on this refinery
-            elif worker_count > self.gas_workers_per_refinery:
-                # Send extra workers to gather minerals
-                excess_workers = worker_count - self.gas_workers_per_refinery
-                for worker in workers.random_group_of(min(excess_workers, worker_count)):
-                    if worker.is_carrying_vespene:
-                        # If worker is carrying gas, return it first
-                        worker.return_resource()
+                if self.debug and self.ai.time % 10 < 0.1:  # Log every 10 seconds
+                    print(f"[Economy] Refinery at {refinery.position}: {worker_count}/{self.gas_workers_per_refinery} workers")
+                
+                # If we need more workers on this refinery
+                if worker_count < self.gas_workers_per_refinery:
+                    # Find idle workers first
+                    idle_workers = self.ai.workers.idle
+                    if idle_workers:
+                        worker = idle_workers.random
+                        worker.gather(refinery)
+                        if self.debug and self.ai.time % 10 < 0.1:
+                            print(f"[Economy] Sent idle worker to gas")
                     else:
-                        # Otherwise, send to gather minerals
-                        await self.ai.distribute_workers()
+                        # Try to get a worker that's mining minerals (but not too many)
+                        mineral_workers = self.ai.workers.filter(
+                            lambda w: w.is_gathering and not w.is_carrying_vespene
+                        )
+                        if mineral_workers and mineral_workers.amount > 8:  # Keep at least 8 on minerals
+                            worker = mineral_workers.random
+                            worker.gather(refinery)
+                            if self.debug and self.ai.time % 10 < 0.1:
+                                print(f"[Economy] Sent mineral worker to gas")
+                
+                # If we have too many workers on this refinery
+                elif worker_count > self.gas_workers_per_refinery:
+                    # Send extra workers to gather minerals
+                    excess_workers = worker_count - self.gas_workers_per_refinery
+                    for worker in workers.random_group_of(min(excess_workers, worker_count)):
+                        if worker.is_carrying_vespene:
+                            # If worker is carrying gas, return it first
+                            worker.return_resource()
+                        else:
+                            # Otherwise, send to gather minerals
+                            await self.ai.distribute_workers()
+                        if self.debug and self.ai.time % 10 < 0.1:
+                            print(f"[Economy] Sent excess gas worker to minerals")
+                            
+        except Exception as e:
+            if self.debug:
+                print(f"[Economy] Error in manage_gas_workers: {e}")
 
     async def expand_now(self):
         """Build a new command center at the closest available expansion location."""

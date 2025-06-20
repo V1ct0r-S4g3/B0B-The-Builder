@@ -1,0 +1,28 @@
+================================================================================
+ECONOMY MANAGER TEST OUTPUT
+================================================================================
+
+Running tests...
+
+test_initialization (tests.test_economy_direct.TestEconomyManager)
+Test that the EconomyManager initializes correctly. ... ok
+test_manage_supply_depots (tests.test_economy_direct.TestEconomyManager)
+Test supply depot management. ... ok
+test_manage_worker_production (tests.test_economy_direct.TestEconomyManager)
+Test worker production management. ... ok
+test_should_build_supply_depot (tests.test_economy_direct.TestEconomyManager)
+Test supply depot construction logic. ... ok
+test_should_expand (tests.test_economy_direct.TestEconomyManager)
+Test expansion logic. ... ok
+test_train_workers (tests.test_economy_direct.TestEconomyManager)
+Test worker training logic. ... ok
+
+----------------------------------------------------------------------
+Ran 6 tests in 0.193s
+
+OK
+
+Test execution complete.
+Tests run: 6
+Failures: 0
+Errors: 0
