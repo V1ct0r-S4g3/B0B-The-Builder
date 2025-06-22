@@ -1,10 +1,48 @@
-"""Handles all military-related logic including unit production, upgrades, and combat."""
+"""
+Military Manager for B0B - The Builder Bot
 
-from unittest.mock import MagicMock
-from sc2.ids.unit_typeid import UnitTypeId
+This module provides military management functionality for StarCraft II bots.
+It handles army production, build orders, and basic combat control.
+
+TEMPLATE USAGE FOR OTHER BOTS:
+1. Copy this file to your bot's managers directory
+2. Customize the build_orders dictionary for your strategy
+3. Modify the _get_desired_army_composition method for your army composition
+4. Adjust the attack logic in _control_army for your combat style
+
+CUSTOMIZATION POINTS:
+- build_orders: Define your build order steps
+- _get_desired_army_composition: Set your target army composition
+- _control_army: Implement your combat logic
+- _train_army: Add training for different unit types
+
+EXAMPLE CUSTOMIZATION:
+```python
+# Add a new build order
+self.build_orders['mech_rush'] = [
+    (UnitTypeId.SUPPLYDEPOT, 13, "Supply Depot at 13 supply"),
+    (UnitTypeId.BARRACKS, 14, "First Barracks"),
+    (UnitTypeId.FACTORY, 20, "Factory for mech units"),
+    # ... more steps
+]
+
+# Modify army composition
+def _get_desired_army_composition(self):
+    if self.current_strategy == "mech_rush":
+        return {
+            UnitTypeId.SIEGETANK: 8,
+            UnitTypeId.HELLION: 12,
+            UnitTypeId.THOR: 2
+        }
+```
+
+AUTHOR: B0B Template Bot
+VERSION: 1.0
+"""
+
 from sc2.ids.ability_id import AbilityId
+from sc2.ids.unit_typeid import UnitTypeId
 from sc2.ids.upgrade_id import UpgradeId
-from sc2.units import Units
 from sc2.position import Point2
 
 class MilitaryManager:
@@ -41,16 +79,15 @@ class MilitaryManager:
         self.build_orders = {
             'bio_rush': [
                 (UnitTypeId.SUPPLYDEPOT, 13, "Supply Depot at 13 supply"),
-                # Wait for first depot to be built before barracks
                 (UnitTypeId.BARRACKS, 14, "First Barracks at 14 supply"),
-                (UnitTypeId.REFINERY, 15, "First Refinery"),
-                (UnitTypeId.BUNKER, 17, "Bunker for defense"),
                 (UnitTypeId.BARRACKS, 19, "Second Barracks"),
-                (UnitTypeId.FACTORY, 20, "Factory for tech"),
                 (UnitTypeId.STARPORT, 22, "Starport for air units"),
                 # Delay second refinery until after first attack wave
                 (UnitTypeId.BARRACKS, 23, "Third Barracks"),
-                # Removed Command Center - EconomyManager handles expansions
+                (UnitTypeId.ENGINEERINGBAY, 25, "Engineering Bay for upgrades"),
+                # Removed Command Center - EconomyManager handles expansion
+                # Removed Refinery - EconomyManager handles gas
+                # Removed Bunker - EconomyManager handles bunker for gas micro
             ],
             'mech': [
                 # Different build order for mech strategy
@@ -62,7 +99,7 @@ class MilitaryManager:
         
         # Current build order state
         self.build_order = []
-        self.build_order_index = 0
+        self.current_build_index = 0
         self.last_supply_check = 0
         self.last_attack_time = 0
         self.attack_interval = 30  # seconds between attacks
@@ -84,7 +121,7 @@ class MilitaryManager:
         if hasattr(self, '_initialized') and self._initialized:
             return
             
-        # Set initial rally point in front of the command center
+        # Set initial rally point towards the enemy
         if self.ai.townhalls:
             self.rally_point = self.ai.townhalls.first.position.towards(
                 self.ai.game_info.map_center, 10
@@ -133,7 +170,7 @@ class MilitaryManager:
                 self._build_order_initialized = True
                 
             # Check if we need to wait for first supply depot
-            if not hasattr(self, '_first_depot_started') and self.build_order_index == 0:
+            if not hasattr(self, '_first_depot_started') and self.current_build_index == 0:
                 if not self._is_first_supply_depot_started():
                     if self.debug and self.ai.time % 5 < 0.1:  # Log every 5 seconds
                         print("[Military] Waiting for first supply depot to be started...")
@@ -165,6 +202,12 @@ class MilitaryManager:
                 if self.debug and self.ai.time % 10 < 0.1:  # Log every 10 seconds
                     print("[Military] No build order available, waiting...")
             
+            # Build tech lab if scheduled and barracks is ready
+            # REMOVED - No tech needed for simple marine build
+            
+            # Build reactors on other barracks for increased production
+            # REMOVED - No reactors needed for simple marine build
+            
             # Continuous production logic - always run regardless of build order status
             await self._continuous_production()
             
@@ -188,161 +231,82 @@ class MilitaryManager:
                 traceback.print_exc()
     
     def _update_build_order(self, force_update=False):
-        """Update the current build order based on the current strategy.
-        
-        Args:
-            force_update: If True, force update even if strategy hasn't changed
-        """
+        """Update the build order based on current game state."""
         try:
-            # Force update to clear any cached build order
-            force_update = True
+            # Use the build order from the build_orders dictionary
+            if self.strategy in self.build_orders:
+                # Convert the build order format from (unit_type, supply, description) to just unit_type
+                self.build_order = [step[0] for step in self.build_orders[self.strategy]]
+                if self.debug:
+                    print(f"[Military] Using build order for strategy: {self.strategy}")
+                    print(f"[Military] Build order: {[step[2] for step in self.build_orders[self.strategy]]}")
+            else:
+                # Fallback to bio_rush if strategy not found
+                self.build_order = [step[0] for step in self.build_orders['bio_rush']]
+                if self.debug:
+                    print(f"[Military] Strategy {self.strategy} not found, using bio_rush")
             
-            if not self.head or not self.head.strategy:
-                return
-                
-            strategy = self.head.strategy
-            
-            # Only update if strategy changed or forced
-            if not force_update and hasattr(self, 'current_strategy') and self.current_strategy == strategy:
-                return
-                
-            # Get build order for current strategy
-            self.build_order = self.build_orders.get(strategy, []).copy()
-            self.build_order_index = 0
-            self.current_strategy = strategy
-            
-            # Reset first depot tracking when build order updates
-            if hasattr(self, '_first_depot_started'):
-                delattr(self, '_first_depot_started')
-            
-            if self.debug:
-                print(f"[Military] Updated build order for strategy: {strategy}")
-                print(f"[Military] Build order: {[step[2] for step in self.build_order]}")
-                print(f"[Military] Total steps: {len(self.build_order)}")
+            self.current_build_index = 0
+            self.build_order_completed = False
                     
         except Exception as e:
             if self.debug:
                 print(f"[Military] Error updating build order: {e}")
-                import traceback
-                traceback.print_exc()
-            # Fall back to default build order
-            self.build_order = self.build_orders.get('bio_rush', []).copy()
-            self.build_order_index = 0
     
     async def _execute_build_order(self):
-        """Execute the next step in the build order if conditions are met."""
+        """Execute the current build order step by step."""
         try:
-            # Skip if we've completed the build order
-            if self.debug and self.ai.time % 5 < 0.1:  # Log every 5 seconds
-                print(f"[Military] Build order check - Index: {self.build_order_index}, Total steps: {len(self.build_order)}")
-                print(f"[Military] Build order steps: {[step[2] for step in self.build_order]}")
-                
-            if self.build_order_index >= len(self.build_order):
-                if self.debug and self.ai.time % 10 < 0.1:
-                    print(f"[Military] Build order completed at index {self.build_order_index}")
-                return
-                
-            current_time = self.ai.time
-            
-            # Get current build order step
-            unit_type, supply, description = self.build_order[self.build_order_index]
-            
-            if self.debug:  # Always log in debug mode for tests
-                print(f"\n[Military] === Starting build order step ===")
-                print(f"[Military] Current build step: {description} (supply: {self.ai.supply_used}/{supply})")
-                print(f"[Military] Current index: {self.build_order_index}, Total steps: {len(self.build_order)}")
-                print(f"[Military] First depot started: {hasattr(self, '_first_depot_started')}, completed: {hasattr(self, '_first_depot_completed')}")
-                print(f"[Military] Current supply: {self.ai.supply_used}/{self.ai.supply_cap}, Workers: {getattr(self.ai, 'workers', 'N/A')}")
-                print(f"[Military] Minerals: {getattr(self.ai, 'minerals', 'N/A')}, Gas: {getattr(self.ai, 'vespene', 'N/A')}")
-                print(f"[Military] Can afford {unit_type}: {getattr(self.ai, 'can_afford', lambda x: 'N/A')(unit_type)}")
-            
-            # Skip if we've tried this step too many times recently
-            if unit_type in self.build_attempts:
-                last_attempt, attempts = self.build_attempts[unit_type]
-                if current_time - last_attempt < 5.0 and attempts > 3:  # Skip if failed 3 times in 5 seconds
-                    if self.debug:
-                        print(f"[Military] Skipping {unit_type} - too many failed attempts")
-                    self.build_order_index += 1
-                    return
-            
-            # Check if we've reached the required supply
-            if self.ai.supply_used < supply:
+            # Check if we've completed the build order
+            if self.current_build_index >= len(self.build_order):
+                self.build_order_completed = True
                 if self.debug:
-                    print(f"[Military] Waiting for supply {self.ai.supply_used}/{supply} before {description}")
+                    print("[Military] Build order completed")
                 return
-                
-            # Special handling for structures that depend on supply depot
-            if unit_type != UnitTypeId.SUPPLYDEPOT and not hasattr(self, '_first_depot_completed') and not self._is_first_supply_depot_completed():
-                if self.debug:
-                    print(f"[Military] Waiting for first supply depot to complete before {description}")
-                    print(f"[Military] Supply depots: {getattr(self.ai.structures(UnitTypeId.SUPPLYDEPOT).ready, 'amount', 0)} built, {getattr(self.ai, 'already_pending', lambda x: 0)(UnitTypeId.SUPPLYDEPOT)} pending")
-                return
-                
-            # Special case for structures handled by EconomyManager
-            if unit_type in [UnitTypeId.SUPPLYDEPOT, UnitTypeId.REFINERY, UnitTypeId.COMMANDCENTER, UnitTypeId.ORBITALCOMMAND]:
-                # Only skip if it's already built or being built
-                existing = getattr(self.ai.structures(unit_type), 'amount', 0) + getattr(self.ai, 'already_pending', lambda x: 0)(unit_type)
-                if existing > 0:
-                    if self.debug:
-                        print(f"[Military] {unit_type} already exists or is being handled by EconomyManager")
-                    self.build_order_index += 1
-                    return
-                
-                # Try to build the structure
-                if await self._try_build_structure(unit_type):
-                    if self.debug:
-                        print(f"[Military] {description}")
-                    self.build_order_index += 1
-                    # Reset attempt counter on success
-                    if unit_type in self.build_attempts:
-                        del self.build_attempts[unit_type]
-                else:
-                    # Track failed attempt
-                    if unit_type not in self.build_attempts:
-                        self.build_attempts[unit_type] = (current_time, 1)
-                    else:
-                        last_time, attempts = self.build_attempts[unit_type]
-                        self.build_attempts[unit_type] = (current_time, attempts + 1)
-                    
-                    if self.debug:
-                        print(f"[Military] Failed to build {unit_type}, attempt {self.build_attempts[unit_type][1]}")
-                return
-                
-            # Check if we already have this structure or it's being built
-            existing = getattr(self.ai.structures(unit_type), 'amount', 0) + getattr(self.ai, 'already_pending', lambda x: 0)(unit_type)
-            if self.debug:
-                print(f"[Military] Checking existing {unit_type}: {existing}")
-            if existing > 0:
-                if self.debug:
-                    print(f"[Military] {unit_type} already exists or is pending")
-                self.build_order_index += 1
-                return
-                
+            
+            # Get current build step
+            unit_type = self.build_order[self.current_build_index]
+            
             # Try to build the structure
-            if self.debug:
-                print(f"[Military] About to call _try_build_structure for {unit_type}")
             if await self._try_build_structure(unit_type):
+                # Move to next step
+                self.current_build_index += 1
                 if self.debug:
-                    print(f"[Military] {description}")
-                self.build_order_index += 1
-                # Reset attempt counter on success
-                if unit_type in self.build_attempts:
-                    del self.build_attempts[unit_type]
-            else:
-                # Track failed attempt
-                if unit_type not in self.build_attempts:
-                    self.build_attempts[unit_type] = (current_time, 1)
-                else:
-                    last_time, attempts = self.build_attempts[unit_type]
-                    self.build_attempts[unit_type] = (current_time, attempts + 1)
+                    print(f"[Military] Completed build step: {unit_type}")
                 
-                if self.debug:
-                    print(f"[Military] Failed to build {unit_type}, attempt {self.build_attempts[unit_type][1]}")
         except Exception as e:
             if self.debug:
                 print(f"[Military] Error in _execute_build_order: {e}")
-                import traceback
-                traceback.print_exc()
+    
+    async def _add_tech_lab_to_first_barracks(self):
+        """Add a tech lab to the first barracks for research capabilities."""
+        try:
+            # Add cooldown to prevent mass flying
+            current_time = self.ai.time
+            if hasattr(self, '_last_tech_lab_attempt') and current_time - self._last_tech_lab_attempt < 5:
+                return False
+            self._last_tech_lab_attempt = current_time
+            
+            # Find the first barracks that doesn't have a tech lab
+            for barrack in self.ai.structures(UnitTypeId.BARRACKS).ready:
+                if not barrack.has_add_on and self.ai.can_afford(UnitTypeId.BARRACKSTECHLAB):
+                    # Check if barracks can lift off and move to make room
+                    if barrack.is_ready and not barrack.orders:
+                        # Try to lift off and move slightly to make room
+                        barrack(AbilityId.LIFT_BARRACKS)
+                        if self.debug:
+                            print(f"[Military] Lifting barracks at {barrack.position} to make room for tech lab")
+                    else:
+                        # Try to build tech lab directly
+                        barrack(AbilityId.BUILD_TECHLAB_BARRACKS)
+                        if self.debug:
+                            print("[Military] Adding tech lab to first barracks")
+                    return True
+            return False
+            
+        except Exception as e:
+            if self.debug:
+                print(f"[Military] Error adding tech lab to barracks: {e}")
+            return False
     
     async def _try_build_structure(self, unit_type):
         """Try to build a structure with better placement logic."""
@@ -372,7 +336,7 @@ class MilitaryManager:
                 
             # Get strategic placement position based on structure type
             placement = await self._get_strategic_placement(unit_type)
-            
+                
             if not placement:
                 if self.debug:
                     print(f"[Military] Could not find strategic placement for {unit_type}")
@@ -447,9 +411,19 @@ class MilitaryManager:
                 # Place starports in the back of the production area
                 return await self._get_starport_placement(base_position, forward_direction)
                 
+            elif unit_type == UnitTypeId.ENGINEERINGBAY:
+                # Place Engineering Bay away from refinery paths
+                return await self._get_engineering_bay_placement(base_position, forward_direction)
+                
+            elif unit_type == UnitTypeId.REFINERY:
+                # Refineries should be built on vespene geysers, not strategic placement
+                # Let the economy manager handle this
+                return None
+                
             elif unit_type == UnitTypeId.BUNKER:
-                # Place bunkers defensively
-                return await self._get_bunker_placement(base_position, forward_direction)
+                # Bunkers are now handled by the economy manager for gas worker micro
+                # Let the economy manager handle this
+                return None
                 
             else:
                 # Default placement near base
@@ -461,25 +435,19 @@ class MilitaryManager:
             return None
     
     async def _get_supply_depot_placement(self, base_position, forward_direction):
-        """Get placement for supply depots in a wall formation."""
+        """Get placement for supply depots."""
         try:
-            # Try to place supply depots closer to base in a wall formation
-            wall_positions = [
-                base_position + forward_direction * 4,  # Front wall (reduced from 8)
-                base_position + forward_direction * 4 + Point2((3, 0)),  # Front wall right (reduced from 4)
-                base_position + forward_direction * 4 + Point2((-3, 0)),  # Front wall left (reduced from -4)
-            ]
+            # Simple placement near base
+            placement = await self.ai.find_placement(
+                UnitTypeId.SUPPLYDEPOT,
+                near=base_position,
+                placement_step=2,
+                max_distance=8
+            )
             
-            for pos in wall_positions:
-                placement = await self.ai.find_placement(
-                    UnitTypeId.SUPPLYDEPOT,
-                    near=pos,
-                    placement_step=2,
-                    max_distance=4  # Reduced from 6
-                )
-                if placement:
-                    return placement
-                    
+            if placement:
+                return placement
+                
             # Fallback to near base
             return await self.ai.find_placement(UnitTypeId.SUPPLYDEPOT, near=base_position, placement_step=2)
             
@@ -489,28 +457,35 @@ class MilitaryManager:
             return None
     
     async def _get_barracks_placement(self, base_position, forward_direction):
-        """Get placement for barracks in a line formation."""
+        """Get placement for barracks."""
         try:
-            # Get existing barracks count for spacing
-            existing_barracks = self.ai.structures(UnitTypeId.BARRACKS).amount
-            barracks_spacing = 4  # Reduced from 6 for tighter formation
-            
-            # Calculate position for next barracks in line - closer to base
-            barracks_line_start = base_position + forward_direction * 6  # Reduced from 12
-            barracks_position = barracks_line_start + Point2((existing_barracks * barracks_spacing, 0))
-            
+            # Simple placement near base
             placement = await self.ai.find_placement(
                 UnitTypeId.BARRACKS,
-                near=barracks_position,
+                near=base_position,
                 placement_step=2,
-                max_distance=6  # Reduced from 8
+                max_distance=10
             )
             
-            if placement:
+            if placement and await self.ai.can_place(UnitTypeId.BARRACKS, placement):
+                if self.debug:
+                    print(f"[Military] Found barracks placement at {placement}")
                 return placement
+            
+            # Fallback: try any valid placement near the base
+            fallback_placement = await self.ai.find_placement(
+                UnitTypeId.BARRACKS,
+                near=base_position,
+                placement_step=3,
+                max_distance=15
+            )
+            
+            if fallback_placement and await self.ai.can_place(UnitTypeId.BARRACKS, fallback_placement):
+                if self.debug:
+                    print(f"[Military] Found fallback barracks placement at {fallback_placement}")
+                return fallback_placement
                 
-            # Fallback to near base
-            return await self.ai.find_placement(UnitTypeId.BARRACKS, near=base_position, placement_step=2)
+            return None
             
         except Exception as e:
             if self.debug:
@@ -542,16 +517,16 @@ class MilitaryManager:
             return None
     
     async def _get_starport_placement(self, base_position, forward_direction):
-        """Get placement for starports in back of production area."""
+        """Get placement for Starports."""
         try:
-            # Place starports closer to base
-            starport_area = base_position + forward_direction * 3 + Point2((0, -4))  # Reduced distances
+            # Place starports near barracks but not blocking them
+            starport_position = base_position + forward_direction * 8 + Point2((4, 0))
             
             placement = await self.ai.find_placement(
                 UnitTypeId.STARPORT,
-                near=starport_area,
+                near=starport_position,
                 placement_step=2,
-                max_distance=6  # Reduced from 10
+                max_distance=6
             )
             
             if placement:
@@ -565,28 +540,28 @@ class MilitaryManager:
                 print(f"[Military] Error in _get_starport_placement: {e}")
             return None
     
-    async def _get_bunker_placement(self, base_position, forward_direction):
-        """Get placement for bunkers defensively."""
+    async def _get_engineering_bay_placement(self, base_position, forward_direction):
+        """Get placement for Engineering Bay away from refinery paths."""
         try:
-            # Place bunkers closer to base for defense
-            bunker_position = base_position + forward_direction * 5  # Reduced from 10
+            # Place Engineering Bay away from refinery paths
+            engineering_bay_position = base_position + forward_direction * 5 + Point2((0, 4))  # Reduced distances
             
             placement = await self.ai.find_placement(
-                UnitTypeId.BUNKER,
-                near=bunker_position,
+                UnitTypeId.ENGINEERINGBAY,
+                near=engineering_bay_position,
                 placement_step=2,
-                max_distance=4  # Reduced from 8
+                max_distance=6  # Reduced from 10
             )
             
             if placement:
                 return placement
                 
             # Fallback to near base
-            return await self.ai.find_placement(UnitTypeId.BUNKER, near=base_position, placement_step=2)
+            return await self.ai.find_placement(UnitTypeId.ENGINEERINGBAY, near=base_position, placement_step=2)
             
         except Exception as e:
             if self.debug:
-                print(f"[Military] Error in _get_bunker_placement: {e}")
+                print(f"[Military] Error in _get_engineering_bay_placement: {e}")
             return None
     
     async def _train_army(self):
@@ -608,7 +583,7 @@ class MilitaryManager:
                 else:
                     production[unit.type_id] = 1
             
-            # Calculate desired composition based on strategy
+            # Calculate desired composition - SIMPLE: just marines
             desired_comp = self._get_desired_army_composition()
             
             # Train units based on desired composition
@@ -618,99 +593,34 @@ class MilitaryManager:
                 if current >= desired_count:
                     continue
                     
-                # Find suitable production facility
+                # Find suitable production facility - ONLY BARRACKS
                 if unit_type == UnitTypeId.MARINE:
                     for barrack in self.ai.structures(UnitTypeId.BARRACKS).idle:
-                        if self.ai.can_afford(unit_type):
-                            barrack.train(unit_type)
+                        if self.ai.can_afford(UnitTypeId.MARINE):
+                            barrack.train(UnitTypeId.MARINE)
                             if self.debug:
                                 print(f"[Military] Training {unit_type}")
                             break
                             
-                elif unit_type == UnitTypeId.MARAUDER:
-                    for barrack in self.ai.structures(UnitTypeId.BARRACKS).filter(
-                        lambda b: b.has_techlab and b.is_idle
-                    ):
-                        if self.ai.can_afford(unit_type) and self.ai.vespene >= 25:
-                            barrack.train(unit_type)
-                            if self.debug:
-                                print(f"[Military] Training {unit_type}")
-                            break
-                            
-                elif unit_type == UnitTypeId.MEDIVAC:
-                    for starport in self.ai.structures(UnitTypeId.STARPORT).idle:
-                        if self.ai.can_afford(unit_type) and self.ai.vespene >= 100:
-                            starport.train(unit_type)
-                            if self.debug:
-                                print(f"[Military] Training {unit_type}")
-                            break
-                            
-                # Add more unit types as needed
         except Exception as e:
             if self.debug:
                 print(f"[Military] Error in _train_army: {e}")
-                import traceback
-                traceback.print_exc()
     
     def _get_desired_army_composition(self):
-        """Get the desired army composition based on current strategy."""
+        """Get the desired army composition - SIMPLE: just marines."""
         try:
-            if self.strategy == "bio_rush":
                 return {
-                    UnitTypeId.MARINE: 20,
-                    UnitTypeId.MARAUDER: 5,
-                    UnitTypeId.MEDIVAC: 2
-                }
-            elif self.strategy == "mech":
-                return {
-                    UnitTypeId.SIEGETANK: 4,
-                    UnitTypeId.HELLION: 8,
-                    UnitTypeId.THOR: 2
-                }
-            else:  # Default to bio
-                return {
-                    UnitTypeId.MARINE: 10,
-                    UnitTypeId.MARAUDER: 3,
-                    UnitTypeId.MEDIVAC: 1
+                UnitTypeId.MARINE: 30  # Just build marines
                 }
         except Exception as e:
             if self.debug:
                 print(f"[Military] Error in _get_desired_army_composition: {e}")
-            # Return default composition on error
-            return {
-                UnitTypeId.MARINE: 10,
-                UnitTypeId.MARAUDER: 3,
-                UnitTypeId.MEDIVAC: 1
-            }
+            return {}
     
     async def _manage_upgrades(self):
-        """Research upgrades for bio army."""
-        try:
-            # Combat Shield
-            if not self.ai.already_pending_upgrade(UpgradeId.SHIELDWALL) and not self.ai.already_pending_upgrade(UpgradeId.STIMPACK):
-                for barrack in self.ai.structures(UnitTypeId.BARRACKSTECHLAB).ready:
-                    if barrack.is_idle and self.ai.can_afford(AbilityId.RESEARCH_STIMPACK):
-                        barrack.research(UpgradeId.STIMPACK)
-                        if self.debug:
-                            print("[Military] Researching Stimpack")
-                        break
-            
-            # Infantry Weapons/Armor
-            for ebay in self.ai.structures(UnitTypeId.ENGINEERINGBAY).ready:
-                if ebay.is_idle:
-                    if self.ai.can_afford(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1) and not self.ai.already_pending_upgrade(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1):
-                        ebay.research(UpgradeId.TERRANINFANTRYWEAPONSLEVEL1)
-                        if self.debug:
-                            print("[Military] Researching Infantry Weapons 1")
-                    elif self.ai.can_afford(UpgradeId.TERRANINFANTRYARMORSLEVEL1) and not self.ai.already_pending_upgrade(UpgradeId.TERRANINFANTRYARMORSLEVEL1):
-                        ebay.research(UpgradeId.TERRANINFANTRYARMORSLEVEL1)
-                        if self.debug:
-                            print("[Military] Researching Infantry Armor 1")
-        except Exception as e:
-            if self.debug:
-                print(f"[Military] Error in _manage_upgrades: {e}")
-                import traceback
-                traceback.print_exc()
+        """Manage upgrades - REMOVED for simple marine build."""
+        # No upgrades needed for simple marine build
+        pass
     
     async def _emergency_supply(self):
         """Build emergency supply depots if we're close to being supply blocked."""
@@ -749,9 +659,8 @@ class MilitaryManager:
     
     def _update_army_composition(self):
         """Update the count of each unit type in the army."""
-        self.army_composition = {}
-        for unit in self.ai.units.filter(
-            lambda u: u.type_id in {
+        # Define combat unit types
+        combat_units = {
                 UnitTypeId.MARINE,
                 UnitTypeId.MARAUDER,
                 UnitTypeId.MEDIVAC,
@@ -765,75 +674,120 @@ class MilitaryManager:
                 UnitTypeId.BANSHEE,
                 UnitTypeId.THOR,
                 UnitTypeId.BATTLECRUISER,
-            } and u.tag in self.army_tags
+        }
+        
+        # Update army_tags with all combat units
+        self.army_tags = set()
+        for unit in self.ai.units.filter(lambda u: u.type_id in combat_units and u.is_ready):
+            self.army_tags.add(unit.tag)
+        
+        # Count army composition
+        self.army_composition = {}
+        for unit in self.ai.units.filter(
+            lambda u: u.type_id in combat_units and u.is_ready
         ):
             self.army_composition[unit.type_id] = self.army_composition.get(unit.type_id, 0) + 1
 
     async def _control_army(self):
-        """Control army units for combat."""
+        """Control army units for combat with wave-based attacks."""
         try:
+            # Define combat unit types (same as in _update_army_composition)
+            combat_units = {
+                UnitTypeId.MARINE,
+                UnitTypeId.MARAUDER,
+                UnitTypeId.MEDIVAC,
+                UnitTypeId.SIEGETANK,
+                UnitTypeId.SIEGETANKSIEGED,
+                UnitTypeId.VIKINGFIGHTER,
+                UnitTypeId.VIKINGASSAULT,
+                UnitTypeId.LIBERATOR,
+                UnitTypeId.GHOST,
+                UnitTypeId.RAVEN,
+                UnitTypeId.BANSHEE,
+                UnitTypeId.THOR,
+                UnitTypeId.BATTLECRUISER,
+            }
+            
             # Update army composition
             self._update_army_composition()
             
-            # Get all combat units that are ready and not moving
+            # Get all combat units that are ready (including moving ones)
             army = self.ai.units.filter(
-                lambda u: u.type_id in self.army_composition 
-                and u.is_ready 
-                and not u.is_moving
+                lambda u: u.type_id in combat_units and u.is_ready 
             )
             
             # If no army, nothing to do
             if not army:
+                if self.debug and self.ai.time % 10 < 0.1:
+                    print("[Military] No army units available")
                 return
                 
             # Set rally point if not set
             if not self.rally_point and self.ai.townhalls:
                 self.rally_point = self.ai.townhalls.first.position.towards(
-                    self.ai.game_info.map_center, 10
+                    self.ai.game_info.map_center, 15
                 )
             
             # Find enemy units and structures
             enemies = self.ai.enemy_units | self.ai.enemy_structures
             
-            # If we have a specific attack target, prioritize it
-            if self.attack_target:
-                for unit in army:
-                    unit.attack(self.attack_target)
-                return
+            # Wave-based attack logic
+            army_size = army.amount
+            current_time = self.ai.time
+            
+            # Initialize wave timing if not set
+            if not hasattr(self, 'last_wave_time'):
+                self.last_wave_time = 0
+                self.wave_size_threshold = 6  # Attack with 6+ units per wave
+                self.wave_cooldown = 10  # Reduced cooldown for more frequent attacks
+            
+            # Debug output every 10 seconds
+            if self.debug and current_time % 10 < 0.1:
+                print(f"[Military] Army control - Size: {army_size}, Threshold: {self.wave_size_threshold}, Cooldown: {current_time - self.last_wave_time:.1f}s, Enemies: {len(enemies)}")
+            
+            # Check if we should launch a new wave
+            should_attack = (
+                army_size >= self.wave_size_threshold and 
+                current_time - self.last_wave_time >= self.wave_cooldown
+            )
+            
+            # If we have enough units and cooldown is ready, launch wave
+            if should_attack:
+                self.attack_started = True
+                self.last_wave_time = current_time
                 
-            # If attack is started or we have enemies in vision
-            if self.attack_started or enemies:
+                # Find attack target - prioritize enemy structures for offensive attacks
+                if self.ai.enemy_structures:
+                    # Attack enemy base structures (offensive)
+                    target = self.ai.enemy_structures.first
+                    attack_type = "OFFENSIVE"
+                elif enemies and army_size >= 12:  # Only attack nearby enemies if we have a large army
+                    # Attack nearby enemies (defensive/cleanup)
+                    target = enemies.closest_to(army.first)
+                    attack_type = "DEFENSIVE"
+                else:
+                    # Attack towards enemy base location if no enemies visible
+                    # Try to find enemy base location or use map center
+                    if hasattr(self.ai, 'enemy_start_locations') and self.ai.enemy_start_locations:
+                        target = self.ai.enemy_start_locations[0]
+                    else:
+                        target = self.ai.game_info.map_center
+                    attack_type = "SCOUTING"
+                
+                # Command all units to attack the target
                 for unit in army:
-                    # Find closest enemy if any
-                    if enemies:
-                        closest_enemy = enemies.closest_to(unit)
-                        if closest_enemy.distance_to(unit) < 15:  # Only attack if enemy is close
-                            unit.attack(closest_enemy)
-                        elif self.rally_point:
-                            unit.move(self.rally_point)
-                    elif self.rally_point:
-                        unit.move(self.rally_point)
-            # Otherwise, move to rally point
+                    # Use attack command for combat units
+                    unit.attack(target)
+                    
+                if self.debug:
+                    print(f"[Military] {attack_type} ATTACK with {army_size} units to {target}")
+                    
+            # If not attacking, gather at rally point
             elif self.rally_point:
                 for unit in army:
                     unit.move(self.rally_point)
-            
-            # Special handling for medivacs - heal damaged bio units
-            medivacs = army.filter(lambda u: u.type_id == UnitTypeId.MEDIVAC)
-            if medivacs:
-                bio_units = army.filter(
-                    lambda u: u.type_id in {UnitTypeId.MARINE, UnitTypeId.MARAUDER}
-                    and u.health_percentage < 1.0  # Only damaged units
-                )
-                
-                for medivac in medivacs:
-                    if bio_units:
-                        # Find most damaged bio unit
-                        target = min(bio_units, key=lambda u: u.health_percentage)
-                        medivac.attack(target)
-                    elif army:
-                        # Otherwise follow the army
-                        medivac.attack(army.closest_to(medivac))
+                if self.debug and current_time % 15 < 0.1:
+                    print(f"[Military] Gathering {army_size} units at rally point")
                     
         except Exception as e:
             if self.debug:
@@ -851,9 +805,6 @@ class MilitaryManager:
                 return
             self._last_continuous_production = current_time
             
-            if self.debug:
-                print(f"[Military] Running continuous production at {current_time}s")
-            
             # Build basic army structures if we don't have them
             await self._ensure_basic_structures()
             
@@ -867,6 +818,10 @@ class MilitaryManager:
     async def _ensure_basic_structures(self):
         """Ensure we have basic army production structures."""
         try:
+            # Only run this during build order execution, not after completion
+            if hasattr(self, 'build_order_completed') and self.build_order_completed:
+                return
+                
             # Build barracks if we don't have any
             if not self.ai.structures(UnitTypeId.BARRACKS).ready:
                 if self.debug:
@@ -874,17 +829,16 @@ class MilitaryManager:
                 await self._try_build_structure(UnitTypeId.BARRACKS)
                 return
             
-            # Build factory if we don't have one and have barracks
-            if (self.ai.structures(UnitTypeId.BARRACKS).ready.amount >= 1 and 
-                not self.ai.structures(UnitTypeId.FACTORY).ready):
-                if self.debug:
-                    print("[Military] Building first factory")
-                await self._try_build_structure(UnitTypeId.FACTORY)
-                return
+            # Build starport if we don't have one and have barracks
+            # Check for both ready and pending starports
+            existing_starports = (self.ai.structures(UnitTypeId.STARPORT).ready.amount + 
+                                self.ai.already_pending(UnitTypeId.STARPORT))
             
-            # Build starport if we don't have one and have factory
-            if (self.ai.structures(UnitTypeId.FACTORY).ready.amount >= 1 and 
-                not self.ai.structures(UnitTypeId.STARPORT).ready):
+            if self.debug and self.ai.time % 10 < 0.1:  # Log every 10 seconds
+                print(f"[Military] Starport check - Ready: {self.ai.structures(UnitTypeId.STARPORT).ready.amount}, Pending: {self.ai.already_pending(UnitTypeId.STARPORT)}, Total: {existing_starports}")
+            
+            if (self.ai.structures(UnitTypeId.BARRACKS).ready.amount >= 1 and 
+                existing_starports == 0):
                 if self.debug:
                     print("[Military] Building first starport")
                 await self._try_build_structure(UnitTypeId.STARPORT)
@@ -899,7 +853,6 @@ class MilitaryManager:
         try:
             # Get current structure counts
             barracks_count = self.ai.structures(UnitTypeId.BARRACKS).ready.amount
-            factory_count = self.ai.structures(UnitTypeId.FACTORY).ready.amount
             starport_count = self.ai.structures(UnitTypeId.STARPORT).ready.amount
             worker_count = self.ai.workers.amount
             
@@ -913,14 +866,6 @@ class MilitaryManager:
                     print(f"[Military] Building additional barracks ({barracks_count} -> {barracks_count + 1})")
                 await self._try_build_structure(UnitTypeId.BARRACKS)
                 return
-            
-            # Build more factories if we have enough workers and gas (MAX 2 FACTORIES)
-            if (worker_count >= 25 and factory_count < 2 and 
-                self.ai.minerals >= 150 and self.ai.vespene >= 100):
-                if self.debug:
-                    print(f"[Military] Building additional factory ({factory_count} -> {factory_count + 1})")
-                await self._try_build_structure(UnitTypeId.FACTORY)
-                return
                 
         except Exception as e:
             if self.debug:
@@ -929,13 +874,14 @@ class MilitaryManager:
     async def _set_barracks_rally_points(self):
         """Set rally points for all barracks so trained units know where to go."""
         try:
-            # Calculate rally point near the map center (forward position)
+            # Calculate rally point towards the enemy (forward position)
             if self.ai.townhalls:
                 base_position = self.ai.townhalls.first.position
                 map_center = self.ai.game_info.map_center
                 
-                # Rally point is towards the map center from our base
-                rally_point = base_position.towards(map_center, 15)
+                # Rally point is towards the map center from our base, at a reasonable distance
+                # This ensures units gather in a forward position for attacks
+                rally_point = base_position.towards(map_center, 10)
                 
                 # Set rally point for all barracks
                 for barrack in self.ai.structures(UnitTypeId.BARRACKS).ready:
@@ -948,3 +894,118 @@ class MilitaryManager:
         except Exception as e:
             if self.debug:
                 print(f"[Military] Error setting barracks rally points: {e}")
+
+    async def _add_reactors_to_barracks(self):
+        """Add reactors to barracks for increased production."""
+        try:
+            # Add cooldown to prevent all barracks from flying at once
+            current_time = self.ai.time
+            if hasattr(self, '_last_reactor_attempt') and current_time - self._last_reactor_attempt < 3:
+                return
+            self._last_reactor_attempt = current_time
+            
+            # Find barracks without reactors
+            barracks_without_reactors = self.ai.structures(UnitTypeId.BARRACKS).filter(lambda b: not b.has_add_on)
+            
+            # Only work on one barracks at a time to prevent mass flying
+            for barrack in barracks_without_reactors:
+                if self.ai.can_afford(UnitTypeId.REACTOR):
+                    # Try to build reactor directly first (since we placed barracks with space)
+                    if barrack.is_ready and not barrack.orders:
+                        barrack.build(UnitTypeId.REACTOR)
+                        if self.debug:
+                            print(f"[Military] Building reactor on barracks at {barrack.position}")
+                        break  # Only work on one barracks at a time
+                    else:
+                        # If direct build fails, try lifting and moving
+                        if barrack.is_ready and not barrack.orders:
+                            barrack(AbilityId.LIFT_BARRACKS)
+                            if self.debug:
+                                print(f"[Military] Lifting barracks at {barrack.position} to make room for reactor")
+                        break  # Only work on one barracks at a time
+            
+            # Handle flying barracks - land them and build add-ons
+            flying_barracks = self.ai.structures(UnitTypeId.BARRACKSFLYING)
+            for flying_barrack in flying_barracks:
+                if not flying_barrack.orders:  # Not already doing something
+                    # Find a good landing spot near the original position
+                    landing_position = flying_barrack.position
+                    placement = await self.ai.find_placement(
+                        UnitTypeId.BARRACKS,
+                        near=landing_position,
+                        placement_step=1,
+                        max_distance=3
+                    )
+                    
+                    if placement:
+                        flying_barrack(AbilityId.LAND_BARRACKS, placement)
+                        if self.debug:
+                            print(f"[Military] Landing flying barracks at {placement}")
+                    else:
+                        # Fallback - land at current position
+                        flying_barrack(AbilityId.LAND_BARRACKS, flying_barrack.position)
+                        if self.debug:
+                            print(f"[Military] Landing flying barracks at current position")
+                    
+        except Exception as e:
+            if self.debug:
+                print(f"[Military] Error adding reactors to barracks: {e}")
+
+    async def _attack_with_army(self):
+        """Send army to attack enemy base."""
+        try:
+            # Define combat unit types (same as in _update_army_composition)
+            combat_units = {
+                UnitTypeId.MARINE,
+                UnitTypeId.MARAUDER,
+                UnitTypeId.MEDIVAC,
+                UnitTypeId.SIEGETANK,
+                UnitTypeId.SIEGETANKSIEGED,
+                UnitTypeId.VIKINGFIGHTER,
+                UnitTypeId.VIKINGASSAULT,
+                UnitTypeId.LIBERATOR,
+                UnitTypeId.GHOST,
+                UnitTypeId.RAVEN,
+                UnitTypeId.BANSHEE,
+                UnitTypeId.THOR,
+                UnitTypeId.BATTLECRUISER,
+            }
+            
+            # Get all combat units
+            army_units = self.ai.units.filter(
+                lambda unit: unit.type_id in combat_units
+            ).ready
+            
+            if not army_units:
+                if self.debug and self.ai.time % 10 < 0.1:
+                    print("[Military] No combat units available for attack")
+                return
+            
+            # Find enemy base
+            enemy_base = None
+            if self.ai.enemy_start_locations:
+                enemy_base = self.ai.enemy_start_locations[0]
+            else:
+                # Fallback: attack towards center of map
+                enemy_base = self.ai.game_info.map_center
+            
+            if not enemy_base:
+                if self.debug:
+                    print("[Military] No enemy base found for attack")
+                return
+            
+            # SUPER AGGRESSIVE: Attack with 6+ marines in squads
+            if len(army_units) >= 6:  # Attack with 6+ marines
+                # Group all units and attack
+                for unit in army_units:
+                    unit.attack(enemy_base)
+                
+                if self.debug and self.ai.time % 5 < 0.1:
+                    print(f"[Military] ATTACKING with {len(army_units)} marines in squad!")
+                    print(f"[Military] Target: {enemy_base}")
+                    
+        except Exception as e:
+            if self.debug:
+                print(f"[Military] Error in _attack_with_army: {e}")
+                import traceback
+                traceback.print_exc()

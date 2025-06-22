@@ -86,9 +86,9 @@ B0B/
 ## 🎮 Running the Bot
 
 ### Quick Start
-```bash
+     ```bash
 python run_simple_bot.py
-```
+     ```
 
 ### Custom Game
 ```bash

@@ -4,11 +4,8 @@ import logging
 import os
 from pathlib import Path
 
-from sc2.bot_ai import BotAI
-
-from managers.economy_manager import EconomyManager
-from managers.head_manager import HeadManager
-from managers.military_manager import MilitaryManager
+# Import the race-aware bot instead of hardcoded managers
+from src.bot.bot import CompetitiveBot
 
 # Set up logging
 log_dir = Path("logs")
@@ -22,12 +19,13 @@ if log_file.exists():
     except OSError as e:
         print(f"Warning: Could not remove log file: {e}")
 
+
 # Configure logging
 def setup_logging():
     """Set up logging configuration and return the file logger."""
     logger = logging.getLogger("B0B")
     logger.setLevel(logging.DEBUG)
-
+    
     # Create file handler
     file_handler = logging.FileHandler(log_file)
     file_handler.setLevel(logging.DEBUG)
@@ -35,14 +33,14 @@ def setup_logging():
     # Create console handler
     console_handler = logging.StreamHandler()
     console_handler.setLevel(logging.INFO)
-
+    
     # Create formatter
     formatter = logging.Formatter(
         "%(asctime)s - %(name)s - %(levelname)s - %(message)s"
     )
     file_handler.setFormatter(formatter)
     console_handler.setFormatter(formatter)
-
+    
     # Add handlers to logger
     logger.addHandler(file_handler)
     logger.addHandler(console_handler)
@@ -54,31 +52,23 @@ def setup_logging():
 logger = setup_logging()
 
 
-class MyBot(BotAI):
-    """Main bot class that inherits from SC2's BotAI and coordinates all managers."""
-
+class MyBot(CompetitiveBot):
+    """Main bot class that inherits from the race-aware CompetitiveBot."""
+    
     def __init__(self):
         """Initialize the bot and its managers."""
         print("[DEBUG] MyBot __init__ called")
         logger.info("[DEBUG] MyBot __init__ called")
-        print(f"[DEBUG] BotAI module: {BotAI.__module__}")
-        print(f"[DEBUG] BotAI file: {getattr(BotAI, '__file__', 'N/A')}")
-        logger.info(f"[DEBUG] BotAI module: {BotAI.__module__}")
-        logger.info(f"[DEBUG] BotAI file: {getattr(BotAI, '__file__', 'N/A')}")
         super().__init__()
         self._closed = False
         self.logger = logger.getChild('MyBot')
         self.logger.info("Initializing B0B bot...")
-        # Initialize managers
-        self.head_manager = None
-        self.economy_manager = None
-        self.military_manager = None
         self.initialized = False
         self.logger.info("Bot instance created")
-
+    
     def __del__(self):
         self.close()
-
+        
     def close(self):
         if not self._closed:
             for handler in logging.getLogger('B0B').handlers[:]:
@@ -86,7 +76,7 @@ class MyBot(BotAI):
                     handler.close()
                 logging.getLogger('B0B').removeHandler(handler)
             self._closed = True
-
+    
     async def on_start(self):
         """Called once at the start of the game."""
         print("[DEBUG] MyBot on_start called")
@@ -96,42 +86,19 @@ class MyBot(BotAI):
             self.logger.info("=" * 50)
             self.logger.info("GAME STARTED - INITIALIZING BOT")
             self.logger.info("=" * 50)
-
-            self.logger.info("Initializing managers...")
-
-            # Initialize managers with detailed logging
-            self.logger.debug("Creating HeadManager...")
-            self.head_manager = HeadManager(self)
-            self.logger.debug("HeadManager created")
-
-            self.logger.debug("Creating EconomyManager...")
-            self.economy_manager = EconomyManager(self)
-            self.logger.debug("EconomyManager created")
-
-            self.logger.debug("Creating MilitaryManager...")
-            self.military_manager = MilitaryManager(self)
-            self.logger.debug("MilitaryManager created")
-
-            # Register managers with HeadManager
-            self.logger.debug("Registering managers with HeadManager...")
-            self.head_manager.register_manager('economy', self.economy_manager)
-            self.head_manager.register_manager('military', self.military_manager)
-            self.logger.debug("Managers registered successfully")
-
-            # Initialize the HeadManager
-            self.logger.debug("Calling HeadManager.on_start()...")
-            await self.head_manager.on_start()
-            self.logger.debug("HeadManager.on_start() completed")
-
+            
+            # Use the parent class's on_start which handles race-aware initialization
+            await super().on_start()
+            
             # Mark bot as initialized
             self.initialized = True
             self.logger.info("Bot initialization complete!")
-
+            
         except Exception as e:
             self.logger.error(f"Error during bot initialization: {e}")
             self.logger.exception("Full traceback:")
             raise
-
+    
     async def on_step(self, iteration):
         """Called every game step."""
         if not self.initialized:
@@ -139,22 +106,22 @@ class MyBot(BotAI):
             return
 
         try:
-            # Log step information
-            self.logger.info(
-                f"\n{'='*20} STEP {iteration} ({self.time:.1f}s) {'='*20}"
-            )
-            self.logger.info(
-                f"Minerals: {self.minerals} | Gas: {self.vespene} | "
-                f"Supply: {self.supply_used}/{self.supply_cap}"
-            )
-            self.logger.info(
-                f"Workers: {self.workers.amount} | Army: {self.supply_army}"
-            )
-
-            # Delegate to head manager
-            if self.head_manager:
-                await self.head_manager.on_step()
-
+            # Only log every 10 seconds (224 steps at faster speed)
+            if iteration % 224 == 0:
+                self.logger.info(
+                    f"\n{'='*20} STEP {iteration} ({self.time:.1f}s) {'='*20}"
+                )
+                self.logger.info(
+                    f"Minerals: {self.minerals} | Gas: {self.vespene} | "
+                    f"Supply: {self.supply_used}/{self.supply_cap}"
+                )
+                self.logger.info(
+                    f"Workers: {self.workers.amount} | Army: {self.supply_army}"
+                )
+            
+            # Delegate to parent class's on_step
+            await super().on_step(iteration)
+            
         except Exception as e:
             self.logger.error(f"Error in on_step: {e}")
             self.logger.exception("Full traceback:")
@@ -163,8 +130,8 @@ class MyBot(BotAI):
         """Called when the game ends."""
         try:
             self.logger.info(f"Game ended with result: {result}")
-            if self.head_manager:
-                await self.head_manager.on_end(result)
+            # Delegate to parent class's on_end
+            await super().on_end(result)
         except Exception as e:
             self.logger.error(f"Error in on_end: {e}")
             self.logger.exception("Full traceback:")

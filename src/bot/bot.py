@@ -1,7 +1,5 @@
 from sc2.bot_ai import BotAI
 from sc2.data import Result, Race
-from sc2.ids.unit_typeid import UnitTypeId
-from sc2.position import Point2
 
 # Add the src directory to the Python path
 import sys
@@ -10,10 +8,15 @@ current_dir = Path(__file__).parent
 src_dir = current_dir.parent
 sys.path.insert(0, str(src_dir))
 
-from managers.economy_manager import EconomyManager
-from managers.military_manager import MilitaryManager
+# Import all race-specific economy managers
+from managers.terran_economy_manager import TerranEconomyManager  # Terran
+from managers.protoss_economy_manager import ProtossEconomyManager  # Protoss
+from managers.zerg_economy_manager import ZergEconomyManager  # Zerg
+from managers.military_manager import MilitaryManager  # Terran military
+from managers.protoss_military_manager import ProtossMilitaryManager  # Protoss
+from managers.zerg_military_manager import ZergMilitaryManager  # Zerg military
 from managers.head_manager import HeadManager
-import random
+
 
 class CompetitiveBot(BotAI):
     """Main bot class that handles the game logic and coordinates managers."""
@@ -23,13 +26,11 @@ class CompetitiveBot(BotAI):
         # Initialize the HeadManager first
         self.head = HeadManager(self)
         
-        # Initialize all managers with reference to head
-        self.economy_manager = EconomyManager(self)
-        self.military_manager = MilitaryManager(self)
+        # Military manager will be set based on race in on_start
+        self.military_manager = None
         
-        # Register managers with the HeadManager
-        self.head.register_manager('economy', self.economy_manager)
-        self.head.register_manager('military', self.military_manager)
+        # Economy manager will be set based on race in on_start
+        self.economy_manager = None
         
         # Track game state
         self.game_started = False
@@ -39,12 +40,57 @@ class CompetitiveBot(BotAI):
         print("Game started")
         self.game_started = True
         
+        # Initialize the appropriate economy manager based on race
+        await self._initialize_economy_manager()
+        
+        # Initialize the appropriate military manager based on race
+        await self._initialize_military_manager()
+        
+        # Register managers with the HeadManager
+        if self.economy_manager:
+            self.head.register_manager('economy', self.economy_manager)
+        if self.military_manager:
+            self.head.register_manager('military', self.military_manager)
+        
         # Let the HeadManager handle manager initialization
         await self.head.on_start()
         
         # Log initial game state
         print(f"Starting position: {self.start_location}")
+        print(f"Bot race: {self.race}")
         print(f"Enemy race: {self.enemy_race if hasattr(self, 'enemy_race') else 'Unknown'}")
+
+    async def _initialize_economy_manager(self):
+        """Initialize the appropriate economy manager based on the bot's race."""
+        if self.race == Race.Terran:
+            self.economy_manager = TerranEconomyManager(self)
+            print("Initialized Terran Economy Manager")
+        elif self.race == Race.Protoss:
+            self.economy_manager = ProtossEconomyManager(self)
+            print("Initialized Protoss Economy Manager")
+        elif self.race == Race.Zerg:
+            self.economy_manager = ZergEconomyManager(self)
+            print("Initialized Zerg Economy Manager")
+        else:
+            # Default to Terran if race is unknown
+            self.economy_manager = TerranEconomyManager(self)
+            print(f"Unknown race {self.race}, defaulting to Terran Economy Manager")
+
+    async def _initialize_military_manager(self):
+        """Initialize the appropriate military manager based on the bot's race."""
+        if self.race == Race.Terran:
+            self.military_manager = MilitaryManager(self)
+            print("Initialized Terran Military Manager")
+        elif self.race == Race.Protoss:
+            self.military_manager = ProtossMilitaryManager(self)
+            print("Initialized Protoss Military Manager")
+        elif self.race == Race.Zerg:
+            self.military_manager = ZergMilitaryManager(self)
+            print("Initialized Zerg Military Manager")
+        else:
+            # Default to Terran if race is unknown
+            self.military_manager = MilitaryManager(self)
+            print(f"Unknown race {self.race}, defaulting to Terran Military Manager")
 
     async def on_step(self, iteration: int):
         """Process each game step by delegating to the HeadManager."""

@@ -38,11 +38,13 @@ def main():
     print('[DEBUG] Instantiating MyBot...')
     bot_instance = MyBot()
     print('[DEBUG] Running game...')
+    # Change the map to a standard available one
+    map_name = "LostandFoundLE"
     run_game(
-        maps.get("Simple64"),  # Use a simple built-in map
+        maps.get(map_name),
         [
-            Bot(Race.Terran, bot_instance),
-            Computer(Race.Random, Difficulty.Easy)
+            Bot(Race.Zerg, bot_instance, name="B0B"),
+            Computer(Race.Protoss, Difficulty.Easy)
         ],
         realtime=False,
         save_replay_as="b0b_replay.SC2Replay"
