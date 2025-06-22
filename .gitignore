@@ -131,5 +131,23 @@ dmypy.json
 # Pyre type checker
 .pyre/
 
-# Pycharm
-/.idea
+# IDE
+.vscode/
+.idea/
+*.swp
+*.swo
+*~
+
+# OS
+.DS_Store
+Thumbs.db
+
+# StarCraft II specific
+*.SC2Replay
+replays/
+logs/
+test_output/
+*.log
+
+# Project specific
+local_sc2_backup/

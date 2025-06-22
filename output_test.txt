@@ -1,3 +1,0 @@
-This is a test output
-Python is working!
-SC2 version: unknown

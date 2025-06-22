@@ -1,4 +1,0 @@
-Return code: 0
-=== STDOUT ===
-Hello from subprocess
-=== STDERR ===
