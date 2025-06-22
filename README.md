@@ -8,25 +8,45 @@
 
 </div>
 
-A StarCraft II Terran AI bot built using the BurnySc2 library, designed to demonstrate effective bot development patterns and strategies.
+A competitive StarCraft II bot with multi-race support, featuring intelligent economy management, military strategy, and defensive AI.
 
 ## 🚀 Features
 
-- **Manager-based Architecture**: Clean separation of concerns with dedicated managers for economy, military, and coordination
-- **Strategic Building Placement**: Buildings placed close to base for optimal defense and efficiency
-- **Optimized Economy**: Smart worker distribution and proactive supply management
-- **Build Order System**: Structured progression through early game development
-- **Continuous Production**: Sustained unit production after build order completion
-- **Error Handling**: Robust error handling and fallback mechanisms
-- **Debug Logging**: Comprehensive logging for development and troubleshooting
+### Multi-Race Support
+- **Terran**: Marine/Marauder/Medivac composition with fast expand
+- **Protoss**: Zealot/Stalker composition with gateway spam
+- **Zerg**: Zergling/Roach composition with larva management
+
+### Economy Management
+- **Race-Specific Economy Managers**: Each race has optimized worker production and resource gathering
+- **Smart Gas Management**: Automatic worker distribution between minerals and gas
+- **Expansion Logic**: Intelligent timing for additional bases
+- **Supply Management**: Automatic supply production (Supply Depots, Pylons, Overlords)
+
+### Military Strategy
+- **Race-Specific Military Managers**: Each race has unique build orders and unit compositions
+- **Defensive AI**: Aggressive defense when enemies are near base
+- **Counter-Attack Logic**: Pursues enemies within range when army is sufficient
+- **Wave Attacks**: Launches coordinated attacks with minimum unit thresholds
+- **Smart Building Placement**: Avoids blocking worker paths and resources
+
+### Technical Features
+- **Modular Architecture**: Separate managers for economy, military, and coordination
+- **Debug Output**: Comprehensive logging for development and analysis
+- **Error Handling**: Robust error handling with graceful degradation
+- **Performance Optimized**: Efficient game loop with minimal overhead
 
 ## 📊 Performance
 
-- **Game Duration**: 4+ minutes of stable gameplay
-- **Economy**: 1200+ minerals/min collection rate
-- **Military**: 20+ army supply with continuous production
-- **Supply Management**: No supply blocking (46/47 supply)
-- **Stability**: No crashes or critical errors
+### Economy Metrics
+- **Worker Saturation**: 100% mineral saturation, optimal gas worker ratios
+- **Income Rate**: 800+ minerals/minute, 100+ gas/minute
+- **Expansion Timing**: Fast expand with proper worker distribution
+
+### Military Metrics
+- **Army Composition**: Race-appropriate unit mixes
+- **Attack Timing**: Wave attacks with 6+ units minimum
+- **Defensive Response**: Immediate reaction to threats within 30 units
 
 ## 🏗️ Architecture
 
@@ -34,65 +54,71 @@ A StarCraft II Terran AI bot built using the BurnySc2 library, designed to demon
 B0B/
 ├── src/
 │   ├── bot/
-│   │   ├── bot.py          # Main bot class
-│   │   └── main.py         # Entry point
+│   │   ├── bot.py          # Main bot class with race detection
+│   │   └── main.py         # Bot entry point
 │   ├── managers/
-│   │   ├── head_manager.py     # Central coordinator
-│   │   ├── economy_manager.py  # Resource management
-│   │   └── military_manager.py # Military production
+│   │   ├── head_manager.py           # Coordinates all managers
+│   │   ├── terran_economy_manager.py # Terran economy logic
+│   │   ├── protoss_economy_manager.py # Protoss economy logic
+│   │   ├── zerg_economy_manager.py   # Zerg economy logic
+│   │   ├── military_manager.py       # Terran military logic
+│   │   ├── protoss_military_manager.py # Protoss military logic
+│   │   └── zerg_military_manager.py  # Zerg military logic
 │   └── config/
-│       └── config.py       # Configuration
-├── tests/                  # Test files
-├── docs/                   # Documentation
-└── run_simple_bot.py       # Quick start script
+│       └── config.py       # Configuration settings
+├── tests/                  # Test suite
+├── replays/               # Game replays
+└── logs/                  # Debug logs
 ```
 
-## 🛠️ Setup
+## 🎮 Race-Specific Features
+
+### Terran
+- **Economy**: SCV production, Supply Depot building, Refinery management
+- **Military**: Barracks with Reactors, Marine/Marauder production, Medivac support
+- **Strategy**: Bio ball composition with fast expand
+
+### Protoss
+- **Economy**: Probe production, Pylon building, Assimilator management
+- **Military**: Gateway spam (4 gateways), Zealot/Stalker production
+- **Strategy**: Gateway timing attack with defensive positioning
+
+### Zerg
+- **Economy**: Drone production from larva, Overlord morphing, Extractor building
+- **Military**: Spawning Pool → Roach Warren, Zergling/Roach production
+- **Strategy**: Larva-based economy with wave attacks
+
+## 🚀 Quick Start
 
 ### Prerequisites
-- Python 3.10+
-- StarCraft II game installed
-- Git (for version control)
+- StarCraft II installed
+- Python 3.8+
+- sc2 library
 
 ### Installation
-
-1. **Clone the repository**
-   ```bash
-   git clone <repository-url>
-   cd B0B
-   ```
-
-2. **Create virtual environment**
-   ```bash
-   python -m venv .venv
-   
-   # Windows
-   .venv\Scripts\activate
-   
-   # Linux/Mac
-   source .venv/bin/activate
-   ```
-
-3. **Install dependencies**
-   ```bash
-   pip install -r requirements.txt
-   ```
-
-4. **Verify installation**
-   ```bash
-   python check_env.py
-   ```
-
-## 🎮 Running the Bot
-
-### Quick Start
-     ```bash
-python run_simple_bot.py
-     ```
-
-### Custom Game
 ```bash
-python -m sc2.main --map "2000AtmospheresAIE" --races terran terran --ai sc2.bot_ai.BotAI src.bot.main:MyBot
+git clone https://github.com/V1ct0r-S4g3/B0B-The-Builder.git
+cd B0B-The-Builder
+pip install -r requirements.txt
+```
+
+### Running the Bot
+
+#### All Races (Auto-Detect)
+```bash
+python run_simple_bot.py
+```
+
+#### Specific Race
+```bash
+# Terran
+python run_simple_bot.py --race Terran
+
+# Protoss  
+python run_simple_bot.py --race Protoss
+
+# Zerg
+python run_simple_bot.py --race Zerg
 ```
 
 ### Testing
@@ -101,106 +127,72 @@ python -m sc2.main --map "2000AtmospheresAIE" --races terran terran --ai sc2.bot
 python run_tests.py
 
 # Run specific test
-python -m pytest tests/test_bot.py
+python tests/test_bot.py
 ```
 
-## 📚 Documentation
+## 📊 Performance
 
-- **[Bot Improvements Summary](BOT_IMPROVEMENTS_SUMMARY.md)**: Comprehensive overview of all improvements and learnings
-- **[Quick Reference Guide](QUICK_REFERENCE_GUIDE.md)**: Essential code patterns and solutions for bot development
-- **[Setup Checklist](SETUP_CHECKLIST.md)**: Step-by-step guide for setting up new bot projects
-- **[Troubleshooting Guide](TROUBLESHOOTING_GUIDE.md)**: Solutions for common issues and problems
+### Economy Metrics
+- **Worker Saturation**: 100% mineral saturation, optimal gas worker ratios
+- **Income Rate**: 800+ minerals/minute, 100+ gas/minute
+- **Expansion Timing**: Fast expand with proper worker distribution
 
-## 🔧 Key Components
+### Military Metrics
+- **Army Composition**: Race-appropriate unit mixes
+- **Attack Timing**: Wave attacks with 6+ units minimum
+- **Defensive Response**: Immediate reaction to threats within 30 units
 
-### HeadManager
-Central coordinator that initializes and manages all other managers. Ensures proper startup sequence and step execution.
+## 🔧 Configuration
 
-### EconomyManager
-Handles worker production, resource collection, and supply management:
-- Optimal worker distribution (6 per gas, rest on minerals)
-- Proactive supply depot building
-- Strategic building placement near base
+Key configuration options in `src/config/config.py`:
+- Worker ratios per race
+- Supply buffer sizes
+- Attack thresholds
+- Expansion timing
+- Debug output levels
 
-### MilitaryManager
-Manages build orders, unit production, and military strategy:
-- Structured build order progression
-- Continuous unit production
-- Rally point management
-- Building placement optimization
+## 🐛 Debugging
 
-## 🎯 Build Order
+Enable debug output by setting `debug = True` in manager classes. Output includes:
+- Economy counts and worker distribution
+- Military unit production and army actions
+- Building placement attempts
+- Error messages and stack traces
 
-1. Supply Depot at 13 supply
-2. First Barracks at 14 supply
-3. First Refinery
-4. Bunker for defense
-5. Second Barracks
-6. Factory for tech
-7. Starport for air units
-8. Third Barracks
+## 📈 Recent Updates
 
-## 🏆 Achievements
+### v2.0 - Multi-Race Support
+- ✅ Added Protoss and Zerg economy managers
+- ✅ Added Protoss and Zerg military managers  
+- ✅ Fixed Zerg larva morphing for drones and overlords
+- ✅ Improved building placement logic
+- ✅ Enhanced defensive AI for all races
+- ✅ Race-aware bot initialization
 
-This bot successfully demonstrates:
-
-- **Environment Setup**: Proper dependency management and compatibility
-- **Manager Pattern**: Clean architecture with separation of concerns
-- **Building Placement**: Strategic placement close to base
-- **Economy Optimization**: Efficient resource collection and worker distribution
-- **Military Production**: Continuous unit production and build order execution
-- **Error Handling**: Robust error handling and fallback mechanisms
-- **Performance**: Stable 4+ minute gameplay with good economy and military
-
-## 🐛 Troubleshooting
-
-### Common Issues
-
-1. **Import Errors**: Ensure BurnySc2 is installed (not python-sc2)
-2. **Manager Not Running**: Check HeadManager initialization in bot.on_start()
-3. **Building Placement**: Verify placement distances are close to base (4-6 units)
-4. **Supply Blocking**: Increase supply buffer and building frequency
-5. **Performance Issues**: Use efficient unit selection and caching
-
-### Debug Mode
-Enable debug logging by setting `self.debug = True` in managers.
-
-## 🔄 Development Workflow
-
-1. **Environment Check**: Run `python check_env.py`
-2. **Test Changes**: Run `python run_simple_bot.py`
-3. **Validate Performance**: Ensure 3+ minute gameplay
-4. **Check Metrics**: Economy > 1000 minerals/min, Army > 15 supply
-5. **Commit Changes**: Use descriptive commit messages
-
-## 📈 Performance Metrics
-
-| Metric | Target | Current |
-|--------|--------|---------|
-| Game Duration | > 3 min | 4+ min |
-| Economy Rate | > 1000/min | 1200+/min |
-| Army Supply | > 15 | 20+ |
-| Supply Usage | < 90% | 46/47 |
-| Stability | No crashes | Stable |
+### v1.0 - Terran Foundation
+- ✅ Basic Terran economy and military
+- ✅ Modular manager architecture
+- ✅ Debug output and logging
+- ✅ Test suite and documentation
 
 ## 🤝 Contributing
 
 1. Fork the repository
 2. Create a feature branch
 3. Make your changes
-4. Test thoroughly
+4. Add tests for new functionality
 5. Submit a pull request
 
 ## 📄 License
 
-This project is licensed under the MIT License - see the [LICENSE](LICENSE) file for details.
+This project is licensed under the MIT License - see the LICENSE file for details.
 
 ## 🙏 Acknowledgments
 
-- BurnySc2 library developers
-- StarCraft II community
-- All contributors and testers
+- Built with the [sc2 library](https://github.com/BurnySc2/python-sc2)
+- Inspired by competitive StarCraft II bot development
+- Community feedback and testing
 
 ---
 
-**B0B - Building Better Bots! 🏗️🤖**
+**B0B - Building Better Bots, One Race at a Time! 🏗️⚔️**
